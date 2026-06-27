@@ -1,0 +1,281 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id              String           @id @default(uuid())
+  name            String           @unique
+  description     String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  rolePermissions RolePermission[]
+  users           User[]
+}
+
+model Permission {
+  id              String           @id @default(uuid())
+  name            String           @unique
+  description     String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  rolePermissions RolePermission[]
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String
+  permissionId String
+  createdAt    DateTime   @default(now())
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+}
+
+model User {
+  id                  String     @id @default(uuid())
+  schoolId            String?
+  roleId              String?
+  name                String
+  email               String     @unique
+  mobile              String?    @unique
+  isActive            Boolean    @default(true)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  password            String
+  resetPasswordExpire DateTime?
+  resetPasswordToken  String?
+  auditLogs           AuditLog[]
+
+
+  role                Role?      @relation(fields: [roleId], references: [id])
+  school              School?    @relation(fields: [schoolId], references: [id])
+}
+
+model School {
+  id              String            @id @default(uuid())
+  name            String            @unique(map: "School_schoolName_key")
+  schoolCode      String            @unique
+  board           String
+  affiliationNo   String?
+  email           String
+  phone           String
+  website         String?
+  logo            String?
+  addressLine     String
+  city            String
+  district        String
+  state           String
+  pincode         String?
+  country         String
+  principalName   String?
+  status          SchoolStatus      @default(PENDING)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  adminEmail      String?
+  adminName       String?
+  adminPhone      String?
+  banner          String?
+  ownerEmail      String?
+  ownerName       String?
+  ownerPhone      String?
+  principalEmail  String?
+  principalPhone  String?
+  schoolBoardCode String
+  sessions        AcademicSession[]
+  auditLogs       AuditLog[]
+  classes         Class[]
+  parents         Parent[]
+  sections        Section[]
+  students        Student[]
+  subjects        Subject[]
+  teachers        Teacher[]
+  users           User[]
+
+  @@index([schoolCode])
+}
+
+model AcademicSession {
+  id          String    @id @default(uuid())
+  schoolId    String
+  sessionName String
+  startDate   DateTime
+  endDate     DateTime
+  isCurrent   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  school      School    @relation(fields: [schoolId], references: [id])
+  classes     Class[]
+  students    Student[]
+
+
+
+  @@index([schoolId])
+}
+
+model Class {
+  id         String          @id @default(uuid())
+  schoolId   String
+  sessionId  String
+  className  String
+  sortName   String
+  classOrder Int?
+  status     Boolean         @default(true)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  school     School          @relation(fields: [schoolId], references: [id])
+  session    AcademicSession @relation(fields: [sessionId], references: [id])
+  sections   Section[]
+  students   Student[]
+
+  @@unique([schoolId, sessionId, className])
+  @@index([schoolId])
+  @@index([sessionId])
+}
+
+
+
+model Section {
+  id          String    @id @default(uuid())
+  schoolId    String
+  classId     String
+  sectionName String
+  capacity    Int?
+  status      Boolean    @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  class       Class     @relation(fields: [classId], references: [id])
+  school      School    @relation(fields: [schoolId], references: [id])
+  students    Student[]
+
+  @@unique([classId, sectionName])
+  @@index([schoolId])
+  @@index([classId])
+}
+
+model Subject {
+  id          String   @id @default(uuid())
+  schoolId    String
+  subjectName String
+  subjectCode String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  school      School   @relation(fields: [schoolId], references: [id])
+
+  @@unique([schoolId, subjectCode])
+}
+
+model Teacher {
+  id            String    @id @default(uuid())
+  schoolId      String
+  employeeId    String
+  firstName     String
+  lastName      String?
+  gender        Gender?
+  email         String?
+  mobile        String?
+  qualification String?
+  experience    Int?
+  joiningDate   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  school        School    @relation(fields: [schoolId], references: [id])
+
+  @@unique([schoolId, employeeId])
+  @@index([schoolId])
+}
+
+model Parent {
+  id           String    @id @default(uuid())
+  schoolId     String
+  fatherName   String?
+  fatherMobile String?
+  fatherEmail  String?
+  motherName   String?
+  motherMobile String?
+  guardianName String?
+  address      String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  school       School    @relation(fields: [schoolId], references: [id])
+  students     Student[]
+
+  @@index([schoolId])
+}
+
+
+
+model Student {
+  id            String          @id @default(uuid())
+  schoolId      String
+  sessionId     String
+  parentId      String?
+  classId       String?
+  sectionId     String?
+  admissionNo   String
+  rollNo        String?
+  firstName     String
+  middleName    String?
+  lastName      String?
+  gender        Gender?
+  dob           DateTime?
+  bloodGroup    String?
+  admissionDate DateTime        @default(now())
+  status        StudentStatus   @default(ACTIVE)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  class         Class?          @relation(fields: [classId], references: [id])
+  parent        Parent?         @relation(fields: [parentId], references: [id])
+  school        School          @relation(fields: [schoolId], references: [id])
+  section       Section?        @relation(fields: [sectionId], references: [id])
+  session       AcademicSession @relation(fields: [sessionId], references: [id])
+
+  @@unique([schoolId, admissionNo])
+  @@index([schoolId])
+  @@index([sessionId])
+  @@index([classId])
+  @@index([sectionId])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  schoolId    String?
+  userId      String
+  module      String
+  action      String
+  description String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+  school      School?  @relation(fields: [schoolId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([schoolId])
+  @@index([userId])
+}
+
+enum SchoolStatus {
+  APPROVED
+  PENDING
+  INACTIVE
+  SUSPENDED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+  TRANSFERRED
+  DROPPED
+}
