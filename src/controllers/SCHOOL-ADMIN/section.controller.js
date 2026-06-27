@@ -1,30 +1,50 @@
 const { PrismaClient } = require("@prisma/client");
+const { getPagination, getPaginationMeta } = require("../../utils/pagination");
 const prisma = new PrismaClient();
 
 exports.index = async (req, res) => {
   try {
-    const page = Number(req.query.page) || 1;
-    const limit = Number(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = getPagination(req);
 
-    const search = req.query.search?.trim();
+    const { search, classId } = req.query;
+
+     const currentSession = await prisma.academicSession.findFirst({
+                where: {
+                    schoolId: req.user.schoolId,
+                    isCurrent: true,
+                },
+            });
+    
+            if (!currentSession) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Current academic session not found.",
+                });
+            }
 
     const where = {
       schoolId: req.user.schoolId,
+      //  sessionId: currentSession.id,
     };
 
-    if (search) {
+    // Filter by Class
+    if (classId) {
+      where.classId = classId;
+    }
+
+    // Search
+    if (search?.trim()) {
       where.OR = [
         {
           sectionName: {
-            contains: search,
+            contains: search.trim(),
             mode: "insensitive",
           },
         },
         {
           class: {
             className: {
-              contains: search,
+              contains: search.trim(),
               mode: "insensitive",
             },
           },
@@ -32,9 +52,7 @@ exports.index = async (req, res) => {
       ];
     }
 
-    const totalSections = await prisma.section.count({
-      where,
-    });
+    const totalSections = await prisma.section.count({ where });
 
     const sections = await prisma.section.findMany({
       where,
@@ -53,25 +71,11 @@ exports.index = async (req, res) => {
       },
     });
 
-    const totalPages = Math.ceil(totalSections / limit);
-
     return res.status(200).json({
       success: true,
       message: "Sections fetched successfully.",
       data: sections,
-
-      pagination: {
-        currentPage: page,
-        perPage: limit,
-        totalRecords: totalSections,
-        totalPages,
-
-        hasPreviousPage: page > 1,
-        hasNextPage: page < totalPages,
-
-        prevPage: page > 1 ? page - 1 : null,
-        nextPage: page < totalPages ? page + 1 : null,
-      },
+      pagination: getPaginationMeta(page, limit, totalSections),
     });
   } catch (error) {
     console.error(error);
@@ -84,7 +88,7 @@ exports.index = async (req, res) => {
 
 exports.store = async (req, res) => {
   try {
-    const { classId, sectionName, capacity, status } = req.body;
+    const { classId, sectionName, capacity,status } = req.body;
 
     if (!classId || !sectionName) {
       return res.status(400).json({
@@ -123,6 +127,8 @@ exports.store = async (req, res) => {
       });
     }
 
+
+
     const section = await prisma.section.create({
       data: {
         schoolId: req.user.schoolId,
@@ -143,6 +149,200 @@ exports.store = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",
+    });
+  }
+};
+
+exports.update = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { classId,sectionName,capacity } = req.body;
+
+    // Current Session
+    const currentSession = await prisma.academicSession.findFirst({
+      where: {
+        schoolId: req.user.schoolId,
+        isCurrent: true,
+      },
+    });
+
+    if (!currentSession) {
+      return res.status(404).json({
+        success: false,
+        message: "Current academic session not found.",
+      });
+    }
+
+    // Section with Class
+    const section = await prisma.section.findFirst({
+      where: {
+        id,
+        schoolId: req.user.schoolId,
+      },
+      include: {
+        class: true,
+      },
+    });
+
+    if (!section) {
+      return res.status(404).json({
+        success: false,
+        message: "Section not found.",
+      });
+    }
+
+    // Validation
+    if (section.class.sessionId !== currentSession.id) {
+      return res.status(400).json({
+        success: false,
+        message: "You can only update sections of the current academic session.",
+      });
+    }
+
+    // Update
+    const updatedSection = await prisma.section.update({
+      where: { id },
+      data: {
+        sectionName,
+        classId,
+        capacity
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Section updated successfully.",
+      data: updatedSection,
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.status = async(req,res)=>{
+  try {
+    const { id } = req.params;
+    const { classId,sectionName,capacity } = req.body;
+
+    // Current Session
+    const currentSession = await prisma.academicSession.findFirst({
+      where: {
+        schoolId: req.user.schoolId,
+        isCurrent: true,
+      },
+    });
+
+    if (!currentSession) {
+      return res.status(404).json({
+        success: false,
+        message: "Current academic session not found.",
+      });
+    }
+
+     const section = await prisma.section.findFirst({
+      where: {
+        id,
+        schoolId: req.user.schoolId,
+      },
+      include: {
+        class: true,
+      },
+    });
+
+    if (!section) {
+      return res.status(404).json({
+        success: false,
+        message: "Section not found.",
+      });
+    }
+
+    if (section.class.sessionId !== currentSession.id) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only update sections of the current academic session.",
+      });
+    }
+
+    const updateStatus = await prisma.section.update({
+      where:{id},
+      data:{
+        status:!section.status
+      }
+    })
+
+    return res.status(200).json({
+      success:true,
+      message:"Section status updated successfully.",
+      data:updateStatus
+    })
+    
+  } catch (error) {
+    return res.status(500).json({
+      success:false,
+      message:error.message
+    })
+  }
+}
+
+
+exports.delete = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const currentSession = await prisma.academicSession.findFirst({
+      where: {
+        schoolId: req.user.schoolId,
+        isCurrent: true,
+      },
+    });
+
+    if (!currentSession) {
+      return res.status(404).json({
+        success: false,
+        message: "Current academic session not found.",
+      });
+    }
+
+    const section = await prisma.section.findFirst({
+      where: {
+        id,
+        schoolId: req.user.schoolId,
+      },
+      include: {
+        class: true,
+      },
+    });
+
+    if (!section) {
+      return res.status(404).json({
+        success: false,
+        message: "Section not found.",
+      });
+    }
+
+    if (section.class.sessionId !== currentSession.id) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only delete sections of the current academic session.",
+      });
+    }
+
+    await prisma.section.delete({
+      where: { id },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Section deleted successfully.",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
     });
   }
 };

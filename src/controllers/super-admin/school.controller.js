@@ -175,8 +175,6 @@ exports.index = async (req, res) => {
 exports.store = async (req, res) => {
     try {
 
-        console.log("BODY =>", req.body);
-        console.log("FILES =>", req.files);
         const {
             name,
             schoolCode,
@@ -210,7 +208,6 @@ exports.store = async (req, res) => {
         if (
             !name ||
             !schoolCode ||
-           
             !email ||
             !phone ||
             !addressLine ||

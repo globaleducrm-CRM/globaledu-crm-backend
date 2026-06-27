@@ -4,16 +4,16 @@ const router = express.Router();
 const upload = require('../../middlewares/upload')
 
 const schoolController = require("../../controllers/super-admin/school.controller");
-// const roleController = require("../../controllers/role.controller");
+const roleController = require("../../controllers/role.controller");
 const userController = require("../../controllers/super-admin/userController");
 const authMiddleware = require("../../middlewares/auth.middleware");
 const roleMiddleware = require("../../middlewares/role.middleware");
 
 
 
-// router.get('/roles',  authMiddleware, roleMiddleware("SUPER_ADMIN","SCHOOL_ADMIN"),roleController.index);
+router.get('/roles',  authMiddleware, roleMiddleware("SUPER_ADMIN","SCHOOL_ADMIN"),roleController.index);
 
-// router.post('/roles/create',authMiddleware, roleMiddleware("SUPER_ADMIN","SCHOOL_ADMIN"), roleController.store);
+router.post('/roles/create',authMiddleware, roleMiddleware("SUPER_ADMIN","SCHOOL_ADMIN"), roleController.store);
 
 // User All show
 router.get("/all-users",authMiddleware,roleMiddleware("SUPER_ADMIN"),userController.index);

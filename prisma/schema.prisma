@@ -42,21 +42,34 @@ model RolePermission {
 model User {
   id                  String     @id @default(uuid())
   schoolId            String?
+  
   roleId              String?
+
   name                String
   email               String     @unique
   mobile              String?    @unique
+  password            String
+
   isActive            Boolean    @default(true)
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
-  password            String
+
   resetPasswordExpire DateTime?
   resetPasswordToken  String?
-  auditLogs           AuditLog[]
 
+  teacherId           String?    @unique
+  studentId           String?    @unique
 
   role                Role?      @relation(fields: [roleId], references: [id])
   school              School?    @relation(fields: [schoolId], references: [id])
+
+  teacher             Teacher?   @relation(fields: [teacherId], references: [id])
+  student             Student?   @relation(fields: [studentId], references: [id])
+  parentId String? @unique
+
+ parent Parent? @relation(fields: [parentId], references: [id])
+
+  auditLogs           AuditLog[]
 }
 
 model School {
@@ -98,6 +111,7 @@ model School {
   subjects        Subject[]
   teachers        Teacher[]
   users           User[]
+  teacherSubjects TeacherSubject[]
 
   @@index([schoolCode])
 }
@@ -134,6 +148,7 @@ model Class {
   session    AcademicSession @relation(fields: [sessionId], references: [id])
   sections   Section[]
   students   Student[]
+  teacherSubjects TeacherSubject[]
 
   @@unique([schoolId, sessionId, className])
   @@index([schoolId])
@@ -154,6 +169,7 @@ model Section {
   class       Class     @relation(fields: [classId], references: [id])
   school      School    @relation(fields: [schoolId], references: [id])
   students    Student[]
+   teacherSubjects   TeacherSubject[]
 
   @@unique([classId, sectionName])
   @@index([schoolId])
@@ -163,13 +179,26 @@ model Section {
 model Subject {
   id          String   @id @default(uuid())
   schoolId    String
+
   subjectName String
+  shortName   String?      // ENG, MAT, SCI
   subjectCode String
+
+  description String?      // Optional
+
+  status      Boolean  @default(true)
+
+  teacherSubjects TeacherSubject[]
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
   school      School   @relation(fields: [schoolId], references: [id])
 
   @@unique([schoolId, subjectCode])
+  @@unique([schoolId, subjectName])
+
+  @@index([schoolId])
 }
 
 model Teacher {
@@ -183,14 +212,43 @@ model Teacher {
   mobile        String?
   qualification String?
   experience    Int?
+  salary            Decimal? @db.Decimal(10,2)
+  status          Boolean  @default(true)
+
+  subjects          TeacherSubject[]
+
   joiningDate   DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   school        School    @relation(fields: [schoolId], references: [id])
+  users           User[]
 
   @@unique([schoolId, employeeId])
   @@index([schoolId])
 }
+
+model TeacherSubject {
+  id          String @id @default(uuid())
+  schoolId    String
+  teacherId   String
+  classId     String
+  sectionId   String
+  subjectId   String
+
+  school      School  @relation(fields: [schoolId], references: [id])
+  teacher     Teacher @relation(fields: [teacherId], references: [id])
+  class       Class   @relation(fields: [classId], references: [id])
+  section     Section @relation(fields: [sectionId], references: [id])
+  subject     Subject @relation(fields: [subjectId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([teacherId])
+  @@unique([teacherId, classId, sectionId, subjectId])
+}
+
 
 model Parent {
   id           String    @id @default(uuid())
@@ -206,6 +264,7 @@ model Parent {
   updatedAt    DateTime  @updatedAt
   school       School    @relation(fields: [schoolId], references: [id])
   students     Student[]
+  users           User[]
 
   @@index([schoolId])
 }
@@ -227,6 +286,7 @@ model Student {
   gender        Gender?
   dob           DateTime?
   bloodGroup    String?
+  
   admissionDate DateTime        @default(now())
   status        StudentStatus   @default(ACTIVE)
   createdAt     DateTime        @default(now())
@@ -236,6 +296,7 @@ model Student {
   school        School          @relation(fields: [schoolId], references: [id])
   section       Section?        @relation(fields: [sectionId], references: [id])
   session       AcademicSession @relation(fields: [sessionId], references: [id])
+  users           User[]
 
   @@unique([schoolId, admissionNo])
   @@index([schoolId])
