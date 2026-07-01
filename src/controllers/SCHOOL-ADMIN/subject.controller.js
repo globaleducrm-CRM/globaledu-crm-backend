@@ -24,7 +24,7 @@ exports.index = async (req, res) => {
 
         const where = {
             schoolId: req.user.schoolId,
-            // sessionId: currentSession.id,
+            sessionId: currentSession.id,
 
             ...(search && {
                 OR: [
@@ -52,6 +52,7 @@ exports.index = async (req, res) => {
             where,
             skip: (page - 1) * limit,
             take: limit,
+
             orderBy: {
                 createdAt: "desc",
             },
@@ -62,6 +63,10 @@ exports.index = async (req, res) => {
         return res.status(200).json({
             success: true,
             message: "Subjects fetched successfully.",
+            session: {
+                id: currentSession.id,
+                sessionName: currentSession.sessionName,
+            },
             data: subjects,
 
             pagination: getPaginationMeta(page, limit, totalSubjects)
@@ -78,7 +83,7 @@ exports.index = async (req, res) => {
 
 exports.store = async (req, res) => {
     try {
-        let { subjectName, subjectCode,shortName,description } = req.body;
+        let { subjectName, subjectCode, shortName, description } = req.body;
 
         if (!subjectName?.trim() || !subjectCode?.trim() || !shortName?.trim()) {
             return res.status(400).json({
@@ -88,9 +93,23 @@ exports.store = async (req, res) => {
         }
 
         subjectName = subjectName.trim();
-        
+
         subjectCode = subjectCode.trim().toUpperCase();
         shortName = shortName.trim().toUpperCase();
+
+        const currentSession = await prisma.academicSession.findFirst({
+            where: {
+                schoolId: req.user.schoolId,
+                isCurrent: true,
+            },
+        });
+
+        if (!currentSession) {
+            return res.status(404).json({
+                success: false,
+                message: "Current academic session not found.",
+            });
+        }
 
         // Check duplicate Subject Name or Code
         const existingSubject = await prisma.subject.findFirst({
@@ -126,7 +145,8 @@ exports.store = async (req, res) => {
                 subjectName,
                 subjectCode,
                 shortName,
-                description
+                description,
+                sessionId: currentSession.id || null
             }
         });
 
@@ -191,15 +211,68 @@ exports.status = async (req, res) => {
     }
 };
 
+exports.show = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const subject = await prisma.subject.findFirst({
+            where: {
+                id,
+                schoolId: req.user.schoolId
+            },
+            include: {
+                class: {
+                    select: {
+                        id: true,
+                        name: true,
+                    }
+                }
+            }
+        });
+
+        if (!subject) {
+            return res.status(404).json({
+                success: false,
+                message: "subject not found"
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: subject
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
+
 exports.update = async (req, res) => {
     try {
         const { id } = req.params;
-        let { subjectName, subjectCode,description,shortName } = req.body;
+        let { subjectName, subjectCode, description, shortName } = req.body;
 
         if (!subjectName?.trim() || !subjectCode?.trim()) {
             return res.status(400).json({
                 success: false,
                 message: "Subject name and subject code are required."
+            });
+        }
+
+        const currentSession = await prisma.academicSession.findFirst({
+            where: {
+                schoolId: req.user.schoolId,
+                isCurrent: true,
+            },
+        });
+
+        if (!currentSession) {
+            return res.status(404).json({
+                success: false,
+                message: "Current academic session not found.",
             });
         }
 
@@ -259,7 +332,8 @@ exports.update = async (req, res) => {
                 subjectName,
                 subjectCode,
                 description,
-                shortName
+                shortName,
+                sessionId: currentSession.id || null
             },
         });
 

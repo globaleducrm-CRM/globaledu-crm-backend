@@ -8,27 +8,31 @@ exports.index = async (req, res) => {
         const { page, limit, skip } = getPagination(req);
 
         const search = req.query.search?.trim() || "";
+        const sessionId = req.query.sessionId;
         const schoolId = req.user.schoolId;
 
         // Get Current Active Session
-        const session = await prisma.academicSession.findFirst({
+        const currentSession = await prisma.academicSession.findFirst({
             where: {
                 schoolId,
                 isCurrent: true
             }
         });
 
-        if (!session) {
+
+
+        if (!currentSession) {
             return res.status(404).json({
                 success: false,
                 message: "No active academic session found."
             });
         }
 
+       
         // Where Condition
         const where = {
             schoolId,
-            sessionId: session.id
+             sessionId: sessionId || currentSession.id,
         };
 
         if (search) {
@@ -366,28 +370,15 @@ exports.status = async (req, res) => {
     }
 };
 
-exports.sessionByShowClass = async (req, res) => {
+exports.getAllClass = async (req, res) => {
   try {
-    // Current Academic Session
-    const currentSession = await prisma.academicSession.findFirst({
-      where: {
-        schoolId: req.user.schoolId,
-        isCurrent: true,
-      },
-    });
-
-    if (!currentSession) {
-      return res.status(404).json({
-        success: false,
-        message: "Current academic session not found.",
-      });
-    }
+    
 
     // Classes of Current Session
     const classes = await prisma.class.findMany({
       where: {
         schoolId: req.user.schoolId,
-        sessionId: currentSession.id,
+        status:true
       },
       orderBy: {
         classOrder: "asc",

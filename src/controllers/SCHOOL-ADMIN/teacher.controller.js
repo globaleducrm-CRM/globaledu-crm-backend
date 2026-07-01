@@ -1,4 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
+const { getPagination, getPaginationMeta } = require("../../utils/pagination");
 const { sendMail } = require('../../config/mail');
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
@@ -9,6 +10,7 @@ exports.index = async (req, res) => {
     try {
         const { page, limit, skip } = getPagination(req);
         const search = req.query.search?.trim();
+        const status = req.query.status;
 
         const where = {
             schoolId: req.user.schoolId,
@@ -49,6 +51,11 @@ exports.index = async (req, res) => {
             }),
         };
 
+        // Status Filter
+        if (status !== undefined) {
+            where.status = status === "true";
+        }
+
         const totalTeachers = await prisma.teacher.count({
             where,
         });
@@ -72,6 +79,8 @@ exports.index = async (req, res) => {
                 experience: true,
                 salary: true,
                 joiningDate: true,
+                dob:true,
+                image:true,
                 status: true,
                 createdAt: true,
             },
@@ -93,6 +102,37 @@ exports.index = async (req, res) => {
         });
     }
 };
+
+
+exports.getallTeacher = async(req,res)=>{
+   try {
+    const teachers = await prisma.teacher.findMany({
+      where: {
+        schoolId: req.user.schoolId,
+        status: true,
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        qualification: true,
+      },
+      orderBy: {
+        firstName: "asc",
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: teachers,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+}
 
 exports.store = async (req, res) => {
     try {
@@ -127,9 +167,7 @@ exports.store = async (req, res) => {
 
         // ✅ Check if school exists
         const school = await prisma.school.findUnique({
-            where: {
-                id: req.user.schoolId
-            }
+            where: { id: req.user.schoolId }
         });
 
         if (!school) {
@@ -161,7 +199,6 @@ exports.store = async (req, res) => {
 
         if (existingTeacher) {
             let message = "Teacher already exists.";
-
             if (existingTeacher.employeeId === employeeId) {
                 message = "Employee ID already exists.";
             } else if (email && existingTeacher.email === email) {
@@ -169,18 +206,12 @@ exports.store = async (req, res) => {
             } else if (mobile && existingTeacher.mobile === mobile) {
                 message = "Mobile number already exists.";
             }
-
-            return res.status(409).json({
-                success: false,
-                message,
-            });
+            return res.status(409).json({ success: false, message });
         }
 
         // ✅ Get TEACHER Role
         const role = await prisma.role.findUnique({
-            where: {
-                name: "TEACHER"
-            }
+            where: { name: "TEACHER" }
         });
 
         if (!role) {
@@ -193,11 +224,8 @@ exports.store = async (req, res) => {
         // ✅ Check if email already exists in User table
         if (email) {
             const existingUser = await prisma.user.findUnique({
-                where: {
-                    email: email
-                }
+                where: { email: email }
             });
-
             if (existingUser) {
                 return res.status(409).json({
                     success: false,
@@ -209,11 +237,8 @@ exports.store = async (req, res) => {
         // ✅ Check if mobile already exists in User table
         if (mobile) {
             const existingUser = await prisma.user.findFirst({
-                where: {
-                    mobile: mobile
-                }
+                where: { mobile: mobile }
             });
-
             if (existingUser) {
                 return res.status(409).json({
                     success: false,
@@ -229,17 +254,22 @@ exports.store = async (req, res) => {
             .replace(/[^a-zA-Z0-9]/g, "")
             .slice(0, 10);
 
+        console.log("📝 Generated Password for:", email);
+        console.log("🔑 Plain Password:", plainPassword);
+
         // ✅ Hash Password
         const hashedPassword = await bcrypt.hash(plainPassword, 10);
+
 
         // ✅ Create User
         const user = await prisma.user.create({
             data: {
                 schoolId: req.user.schoolId,
+
                 roleId: role.id,
-                name: `${firstName} ${lastName || ''}`.trim(),
-                email: email,
-                mobile: mobile,
+                name: `${firstName} ${lastName || ""}`.trim(),
+                email,
+                mobile,
                 password: hashedPassword,
                 isActive: true
             }
@@ -249,7 +279,7 @@ exports.store = async (req, res) => {
         const teacher = await prisma.teacher.create({
             data: {
                 schoolId: req.user.schoolId,
-                userId: user.id,
+                userId: user.id, // relation
                 employeeId: employeeId,
                 firstName: firstName,
                 lastName: lastName,
@@ -260,91 +290,113 @@ exports.store = async (req, res) => {
                 experience: experience ? Number(experience) : null,
                 salary: salary ? Number(salary) : null,
                 joiningDate: joiningDate ? new Date(joiningDate) : null,
-                isActive: true
+                status: true
             }
         });
 
-        // ✅ Send Email (with correct variables)
-        try {
-            if (email) {
-                await sendMail({
-                    to: email,
-                    subject: "Welcome To GlobalEdu CRM - Teacher Account Created",
-                    html: `
+
+
+
+
+        // ✅ Send Email with proper error handling
+        let emailSent = false;
+        if (email) {
+            try {
+                const emailHTML = `
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Welcome</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to GlobalEdu CRM</title>
+    <style>
+        body { margin: 0; padding: 0; background: #f5f5f5; font-family: Arial, sans-serif; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #dc2626; padding: 25px; text-align: center; color: #fff; border-radius: 10px 10px 0 0; }
+        .content { background: #ffffff; padding: 35px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .details { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        .details td { padding: 12px; border: 1px solid #ddd; }
+        .details .label { font-weight: bold; background: #fafafa; }
+        .button { display: inline-block; background: #dc2626; color: #fff; padding: 14px 35px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
+        .footer { text-align: center; padding: 20px; color: #777; font-size: 12px; }
+        .password-box { background: #f8f8f8; padding: 15px; border-radius: 6px; text-align: center; font-size: 20px; font-weight: bold; letter-spacing: 2px; margin: 10px 0; }
+        .warning { color: #e74c3c; font-weight: bold; }
+    </style>
 </head>
-<body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif;">
-    <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
-        <tr>
-            <td align="center">
-                <table width="650" cellpadding="0" cellspacing="0"
-                    style="background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.1);">
-                    <tr>
-                        <td style="background:#dc2626;padding:25px;text-align:center;color:#fff;">
-                            <h1 style="margin:0;">GlobalEdu CRM</h1>
-                            <p style="margin-top:8px;">School Management System</p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td style="padding:35px;">
-                            <h2 style="margin-top:0;">Welcome ${firstName} ${lastName || ''} 👋</h2>
-                            <p>Your Teacher account has been created successfully.</p>
-                            <table width="100%" cellpadding="10" cellspacing="0"
-                                style="border-collapse:collapse;border:1px solid #ddd;margin-top:20px;">
-                                <tr>
-                                    <td style="font-weight:bold;background:#fafafa;">School Name</td>
-                                    <td>${school.name}</td>
-                                </tr>
-                                <tr>
-                                    <td style="font-weight:bold;background:#fafafa;">Employee ID</td>
-                                    <td>${employeeId}</td>
-                                </tr>
-                                <tr>
-                                    <td style="font-weight:bold;background:#fafafa;">Email</td>
-                                    <td>${email}</td>
-                                </tr>
-                                <tr>
-                                    <td style="font-weight:bold;background:#fafafa;">Password</td>
-                                    <td>${plainPassword}</td>
-                                </tr>
-                            </table>
-                            <div style="text-align:center;margin:35px 0;">
-                                <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login"
-                                    style="background:#dc2626;color:#fff;padding:14px 35px;text-decoration:none;border-radius:6px;display:inline-block;font-weight:bold;">
-                                    Login Now
-                                </a>
-                            </div>
-                            <p style="color:#555;">
-                                For security reasons, please change your password after your first login.
-                            </p>
-                            <p>
-                                Regards,<br>
-                                <b>GlobalEdu CRM Team</b>
-                            </p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td style="background:#f8f8f8;padding:18px;text-align:center;font-size:12px;color:#777;">
-                            © ${new Date().getFullYear()} GlobalEdu CRM. All Rights Reserved.
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 style="margin:0;">GlobalEdu CRM</h1>
+            <p style="margin-top:8px;">School Management System</p>
+        </div>
+        <div class="content">
+            <h2 style="margin-top:0;color:#333;">Welcome ${firstName} ${lastName || ''}! 👋</h2>
+            <p>Your Teacher account has been created successfully. Here are your login credentials:</p>
+            
+            <table class="details">
+                <tr>
+                    <td class="label">🏫 School Name</td>
+                    <td>${school.name}</td>
+                </tr>
+                <tr>
+                    <td class="label">🆔 Employee ID</td>
+                    <td><strong>${employeeId}</strong></td>
+                </tr>
+                <tr>
+                    <td class="label">📧 Email</td>
+                    <td><strong>${email}</strong></td>
+                </tr>
+                <tr>
+                    <td class="label">🔑 Temporary Password</td>
+                    <td>
+                        <div class="password-box">${plainPassword}</div>
+                    </td>
+                </tr>
+            </table>
+            
+            <div style="text-align:center;">
+                <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login" class="button">
+                    🚀 Login Now
+                </a>
+            </div>
+            
+            <div style="background:#fff3cd;padding:15px;border-radius:6px;border-left:4px solid #ffc107;margin:20px 0;">
+                <p style="margin:0;color:#856404;">
+                    <span class="warning">⚠️ Important:</span> For security reasons, please change your password after your first login.
+                </p>
+            </div>
+            
+            <p style="color:#555;margin-top:20px;">
+                Regards,<br>
+                <strong>GlobalEdu CRM Team</strong>
+            </p>
+        </div>
+        <div class="footer">
+            © ${new Date().getFullYear()} GlobalEdu CRM. All Rights Reserved.
+        </div>
+    </div>
 </body>
 </html>
-                    `
+                `;
+
+                const info = await sendMail({
+                    to: email,
+                    subject: `Welcome To ${school.name} - Teacher Account Created`,
+                    html: emailHTML
                 });
-                console.log("Email sent successfully to:", email);
+
+                emailSent = true;
+                console.log("✅ Email sent successfully to:", email);
+                console.log("Mail Sent:", info.response);
+            } catch (err) {
+                console.error("Email Error:");
+                console.error(err);
+                console.error(err.message);
+                console.error(err.stack);
+                // Don't fail the request if email fails
             }
-        } catch (emailError) {
-            console.error("Email sending failed:", emailError.message);
-            // Don't fail the request if email fails
+        } else {
+            console.log("⚠️ No email provided, skipping email send");
         }
 
         // ✅ Remove password from response
@@ -353,7 +405,9 @@ exports.store = async (req, res) => {
 
         return res.status(201).json({
             success: true,
-            message: "Teacher created successfully. Login credentials sent to email.",
+            message: emailSent
+                ? "Teacher created successfully. Login credentials sent to email."
+                : "Teacher created successfully but email could not be sent. Please contact admin.",
             data: {
                 teacher: teacher,
                 user: userResponse
@@ -361,7 +415,8 @@ exports.store = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Store Teacher Error:", error);
+        console.error("❌ Store Teacher Error:", error);
+        console.error("❌ Error stack:", error.stack);
 
         // ✅ Better error handling
         if (error.code === 'P2002') {
@@ -374,6 +429,387 @@ exports.store = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: error.message || "Internal Server Error",
+        });
+    }
+};
+
+
+exports.status = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Check School
+        const school = await prisma.school.findFirst({
+            where: {
+                id: req.user.schoolId,
+                status: "APPROVED",
+            },
+        });
+
+        if (!school) {
+            return res.status(403).json({
+                success: false,
+                message: "School is not approved.",
+            });
+        }
+
+        // Check Teacher
+        const teacher = await prisma.teacher.findFirst({
+            where: {
+                id,
+                schoolId: req.user.schoolId,
+            },
+        });
+
+        if (!teacher) {
+            return res.status(404).json({
+                success: false,
+                message: "Teacher not found.",
+            });
+        }
+
+        const newStatus = !teacher.status;
+
+        // Update Teacher
+        const updatedTeacher = await prisma.teacher.update({
+            where: { id },
+            data: {
+                status: newStatus,
+            },
+        });
+
+        // Update User Status
+        await prisma.user.updateMany({
+            where: {
+                id: teacher.userId,
+            },
+            data: {
+                isActive: newStatus,
+            },
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: `Teacher ${newStatus ? "activated" : "deactivated"} successfully.`,
+            data: updatedTeacher,
+        });
+
+    } catch (error) {
+        console.error("Teacher Status Error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+};
+
+exports.show = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: "Teacher ID is required."
+            });
+        }
+
+        const teacher = await prisma.teacher.findFirst({
+            where: {
+                id,
+                schoolId: req.user.schoolId
+            }
+        });
+
+        if (!teacher) {
+            return res.status(404).json({
+                success: false,
+                message: "Teacher not found."
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Teacher fetched successfully.",
+            data: teacher
+        });
+
+    } catch (error) {
+        console.error("Show Teacher Error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+exports.update = async (req, res) => {
+    try {
+
+        const {id} = req.params;
+      
+
+        let {
+            employeeId,
+            firstName,
+            lastName,
+            gender,
+            email,
+            mobile,
+            qualification,
+            experience,
+            salary,
+            joiningDate,
+            dob,
+        } = req.body;
+
+        // Validation
+        if (!employeeId?.trim() || !firstName?.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Employee ID and First Name are required."
+            });
+        }
+
+        // Sanitize
+        employeeId = employeeId.trim().toUpperCase();
+        firstName = firstName.trim();
+        lastName = lastName?.trim() || null;
+        email = email?.trim().toLowerCase() || null;
+        mobile = mobile?.trim() || null;
+        qualification = qualification?.trim() || null;
+
+        // file 
+        const image = req.file?.path || null;
+
+        // Find Teacher
+        const teacher = await prisma.teacher.findFirst({
+            where: {
+                id,
+                schoolId: req.user.schoolId
+            }
+        });
+
+        if (!teacher) {
+            return res.status(404).json({
+                success: false,
+                message: "Teacher not found."
+            });
+        }
+
+        // Duplicate Teacher Check
+        const duplicateTeacher = await prisma.teacher.findFirst({
+            where: {
+                schoolId: req.user.schoolId,
+                id: {
+                    not: id
+                },
+                OR: [
+                    { employeeId },
+                    ...(email ? [{ email }] : []),
+                    ...(mobile ? [{ mobile }] : [])
+                ]
+            }
+        });
+
+        if (duplicateTeacher) {
+            let message = "Teacher already exists.";
+
+            if (duplicateTeacher.employeeId === employeeId) {
+                message = "Employee ID already exists.";
+            } else if (duplicateTeacher.email === email) {
+                message = "Email already exists.";
+            } else if (duplicateTeacher.mobile === mobile) {
+                message = "Mobile number already exists.";
+            }
+
+            return res.status(409).json({
+                success: false,
+                message
+            });
+        }
+
+        // Find User using teacher.userId
+        const user = teacher.userId
+            ? await prisma.user.findUnique({
+                where: {
+                    id: teacher.userId
+                }
+            })
+            : null;
+
+        // Email Duplicate Check
+        if (email) {
+            const existingUser = await prisma.user.findFirst({
+                where: {
+                    email,
+                    ...(user && {
+                        id: {
+                            not: user.id
+                        }
+                    })
+                }
+            });
+
+            if (existingUser) {
+                return res.status(409).json({
+                    success: false,
+                    message: "Email already exists in user system."
+                });
+            }
+        }
+
+        // Mobile Duplicate Check
+        if (mobile) {
+            const existingUser = await prisma.user.findFirst({
+                where: {
+                    mobile,
+                    ...(user && {
+                        id: {
+                            not: user.id
+                        }
+                    })
+                }
+            });
+
+            if (existingUser) {
+                return res.status(409).json({
+                    success: false,
+                    message: "Mobile number already exists in user system."
+                });
+            }
+        }
+
+        // Update Teacher
+        const updatedTeacher = await prisma.teacher.update({
+            where: {
+                id
+            },
+            data: {
+                employeeId,
+                firstName,
+                lastName,
+                gender,
+                email,
+                mobile,
+                qualification,
+                experience: experience ? Number(experience) : null,
+                salary: salary ? Number(salary) : null,
+                dob: dob ? new Date(dob) : null,
+                image: image || null,
+                joiningDate: joiningDate ? new Date(joiningDate) : null
+            }
+        });
+
+        // Update User
+        if (user) {
+            await prisma.user.update({
+                where: {
+                    id: user.id
+                },
+                data: {
+                    name: `${firstName} ${lastName || ""}`.trim(),
+                    email,
+                    mobile
+                }
+            });
+        }
+
+        // Fetch Updated Record
+        const result = await prisma.teacher.findUnique({
+            where: {
+                id
+            },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        mobile: true,
+                        isActive: true
+                    }
+                },
+                school: {
+                    select: {
+                        id: true,
+                        name: true
+                    }
+                }
+            }
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Teacher updated successfully.",
+            data: result
+        });
+
+    } catch (error) {
+        console.error(error);
+
+        if (error.code === "P2002") {
+            return res.status(409).json({
+                success: false,
+                message: "Duplicate entry found."
+            });
+        }
+
+        return res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+exports.delete = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Check Teacher
+        const teacher = await prisma.teacher.findFirst({
+            where: {
+                id,
+                schoolId: req.user.schoolId
+            }
+        });
+
+        if (!teacher) {
+            return res.status(404).json({
+                success: false,
+                message: "Teacher not found."
+            });
+        }
+
+        // Delete User (if exists)
+        if (teacher.userId) {
+            await prisma.user.delete({
+                where: {
+                    id: teacher.userId
+                }
+            });
+        }
+
+        // Delete Teacher
+        await prisma.teacher.delete({
+            where: {
+                id
+            }
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Teacher deleted successfully."
+        });
+
+    } catch (error) {
+        console.error("Delete Teacher Error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: error.message
         });
     }
 };

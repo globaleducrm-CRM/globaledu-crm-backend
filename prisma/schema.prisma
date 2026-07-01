@@ -7,6 +7,26 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum SchoolStatus {
+  APPROVED
+  PENDING
+  INACTIVE
+  SUSPENDED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+  TRANSFERRED
+  DROPPED
+}
+
 model Role {
   id              String           @id @default(uuid())
   name            String           @unique
@@ -40,34 +60,34 @@ model RolePermission {
 }
 
 model User {
-  id                  String     @id @default(uuid())
+  id                  String   @id @default(uuid())
   schoolId            String?
-  
   roleId              String?
 
   name                String
-  email               String     @unique
-  mobile              String?    @unique
+  email               String   @unique
+  mobile              String?  @unique
   password            String
 
-  isActive            Boolean    @default(true)
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
+  isActive            Boolean  @default(true)
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   resetPasswordExpire DateTime?
   resetPasswordToken  String?
 
-  teacherId           String?    @unique
-  studentId           String?    @unique
 
-  role                Role?      @relation(fields: [roleId], references: [id])
-  school              School?    @relation(fields: [schoolId], references: [id])
 
-  teacher             Teacher?   @relation(fields: [teacherId], references: [id])
-  student             Student?   @relation(fields: [studentId], references: [id])
-  parentId String? @unique
+  role                Role?    @relation(fields: [roleId], references: [id])
+  school              School?  @relation(fields: [schoolId], references: [id])
 
- parent Parent? @relation(fields: [parentId], references: [id])
+  // No teacherId
+  teacher             Teacher?
+  student Student?
+  parent Parent?
+
+
 
   auditLogs           AuditLog[]
 }
@@ -128,6 +148,9 @@ model AcademicSession {
   school      School    @relation(fields: [schoolId], references: [id])
   classes     Class[]
   students    Student[]
+  sections    Section[]
+  subjects    Subject[]
+  teachers    Teacher[]
 
 
 
@@ -137,7 +160,7 @@ model AcademicSession {
 model Class {
   id         String          @id @default(uuid())
   schoolId   String
-  sessionId  String
+  
   className  String
   sortName   String
   classOrder Int?
@@ -145,6 +168,7 @@ model Class {
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
   school     School          @relation(fields: [schoolId], references: [id])
+  sessionId  String
   session    AcademicSession @relation(fields: [sessionId], references: [id])
   sections   Section[]
   students   Student[]
@@ -163,11 +187,19 @@ model Section {
   classId     String
   sectionName String
   capacity    Int?
+  
+  classTeacherId     String?
+  coClassTeacherId   String?
   status      Boolean    @default(true)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   class       Class     @relation(fields: [classId], references: [id])
   school      School    @relation(fields: [schoolId], references: [id])
+   
+  classTeacher       Teacher?        @relation("ClassTeacher", fields: [classTeacherId], references: [id])
+  coClassTeacher     Teacher?        @relation("CoClassTeacher", fields: [coClassTeacherId], references: [id])
+  sessionId  String?
+  session    AcademicSession? @relation(fields: [sessionId], references: [id])
   students    Student[]
    teacherSubjects   TeacherSubject[]
 
@@ -185,6 +217,8 @@ model Subject {
   subjectCode String
 
   description String?      // Optional
+  
+  
 
   status      Boolean  @default(true)
 
@@ -195,6 +229,9 @@ model Subject {
 
   school      School   @relation(fields: [schoolId], references: [id])
 
+  sessionId  String?
+  session    AcademicSession? @relation(fields: [sessionId], references: [id])
+
   @@unique([schoolId, subjectCode])
   @@unique([schoolId, subjectName])
 
@@ -204,24 +241,37 @@ model Subject {
 model Teacher {
   id            String    @id @default(uuid())
   schoolId      String
+  image         String?
   employeeId    String
   firstName     String
   lastName      String?
   gender        Gender?
+
   email         String?
   mobile        String?
+  dob           DateTime?
   qualification String?
   experience    Int?
-  salary            Decimal? @db.Decimal(10,2)
-  status          Boolean  @default(true)
+  salary        Decimal? @db.Decimal(10,2)
 
-  subjects          TeacherSubject[]
+  status        Boolean @default(true)
 
   joiningDate   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  school        School    @relation(fields: [schoolId], references: [id])
-  users           User[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  school        School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  userId        String? @unique
+  user          User?   @relation(fields: [userId], references: [id])
+  sessionId  String?
+  session    AcademicSession? @relation(fields: [sessionId], references: [id])
+
+  subjects      TeacherSubject[]
+
+  classTeacherSections   Section[] @relation("ClassTeacher")
+  coClassTeacherSections Section[] @relation("CoClassTeacher")
 
   @@unique([schoolId, employeeId])
   @@index([schoolId])
@@ -251,58 +301,151 @@ model TeacherSubject {
 
 
 model Parent {
-  id           String    @id @default(uuid())
-  schoolId     String
-  fatherName   String?
-  fatherMobile String?
-  fatherEmail  String?
-  motherName   String?
-  motherMobile String?
-  guardianName String?
-  address      String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  school       School    @relation(fields: [schoolId], references: [id])
-  students     Student[]
-  users           User[]
+  id             String   @id @default(uuid())
+  schoolId       String
+
+  fatherName     String
+  fatherMobile   String
+  fatherEmail    String
+
+  motherName     String?
+  motherMobile   String?
+  motherEmail    String?
+
+  
+
+  address        String?
+  city           String?
+  state          String?
+  pincode        String?
+
+  fatherOccupation String?
+  motherOccupation String?
+
+  fatherAadhaar    String?
+  motherAadhaar    String?
+
+  annualIncome     Float?
+
+  officeAddress    String?
+  status        Boolean @default(true)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  school         School @relation(fields: [schoolId], references: [id])
+  userId          String? @unique
+  user            User? @relation(fields: [userId], references: [id])
+  students       Student[]
 
   @@index([schoolId])
+  @@unique([schoolId, fatherEmail])
 }
 
 
 
 model Student {
-  id            String          @id @default(uuid())
-  schoolId      String
-  sessionId     String
-  parentId      String?
-  classId       String?
-  sectionId     String?
-  admissionNo   String
-  rollNo        String?
-  firstName     String
-  middleName    String?
-  lastName      String?
-  gender        Gender?
-  dob           DateTime?
-  bloodGroup    String?
-  
-  admissionDate DateTime        @default(now())
-  status        StudentStatus   @default(ACTIVE)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  class         Class?          @relation(fields: [classId], references: [id])
-  parent        Parent?         @relation(fields: [parentId], references: [id])
-  school        School          @relation(fields: [schoolId], references: [id])
-  section       Section?        @relation(fields: [sectionId], references: [id])
-  session       AcademicSession @relation(fields: [sessionId], references: [id])
-  users           User[]
+  id              String          @id @default(uuid())
+
+  schoolId        String
+  sessionId       String
+  parentId        String?
+
+  classId         String?
+  sectionId       String?
+
+  admissionNo     String
+  rollNo          Int?
+
+  image           String?
+
+  firstName       String
+  middleName      String?
+  lastName        String?
+
+  email           String
+  mobile          String
+
+  gender          Gender?
+  dob             DateTime?
+
+  bloodGroup      String?
+  nationality     String? @default("India")
+
+  religion        String?
+  caste           String?
+  category        String?
+
+  previousSchool  String?
+
+  admissionDate   DateTime @default(now())
+
+  transport       Boolean @default(false)
+  hostel          Boolean @default(false)
+
+  medicalHistory  String?
+
+ 
+
+  // NEW FIELDS
+
+  address         String?
+  city            String?
+  state           String?
+  pincode         String?
+  country         String? @default("India")
+
+  height          Float?
+  weight          Float?
+
+  status          StudentStatus @default(ACTIVE)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  school          School           @relation(fields: [schoolId], references: [id])
+  session         AcademicSession  @relation(fields: [sessionId], references: [id])
+
+  class           Class?           @relation(fields: [classId], references: [id])
+  section         Section?         @relation(fields: [sectionId], references: [id])
+
+  parent          Parent?          @relation(fields: [parentId], references: [id])
+
+  userId          String? @unique
+  user            User? @relation(fields: [userId], references: [id])
+
+  transportInfo StudentTransport?
 
   @@unique([schoolId, admissionNo])
+  @@unique([schoolId, email])
+
   @@index([schoolId])
   @@index([sessionId])
   @@index([classId])
   @@index([sectionId])
+  @@index([parentId])
+}
+
+
+
+model StudentTransport{
+    id String @id @default(uuid())
+
+    studentId String @unique
+
+    required Boolean @default(false)
+
+    pickupPoint String?
+    pickupTime String?
+    dropTime String?
+
+    conductorName String?
+    conductorPhone String?
+
+    student Student @relation(fields:[studentId],references:[id])
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
 }
 
 model AuditLog {
@@ -321,22 +464,4 @@ model AuditLog {
   @@index([userId])
 }
 
-enum SchoolStatus {
-  APPROVED
-  PENDING
-  INACTIVE
-  SUSPENDED
-}
 
-enum Gender {
-  MALE
-  FEMALE
-  OTHER
-}
-
-enum StudentStatus {
-  ACTIVE
-  INACTIVE
-  TRANSFERRED
-  DROPPED
-}

@@ -19,7 +19,7 @@ const sendMail = async ({ to, subject, html }) => {
         const info = await transporter.sendMail({
             from: `"GlobalEdu CRM" <${process.env.EMAIL_USER}>`,
             to,
-            subject,
+            subject,    
             html,
         });
 
