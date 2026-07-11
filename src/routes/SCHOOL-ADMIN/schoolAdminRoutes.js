@@ -7,6 +7,7 @@ const sectionController = require('../../controllers/SCHOOL-ADMIN/section.contro
 const subjectController = require('../../controllers/SCHOOL-ADMIN/subject.controller');
 const teacherController = require('../../controllers/SCHOOL-ADMIN/teacher.controller');
 const studentController = require('../../controllers/SCHOOL-ADMIN/student.controller');
+const timeTableController = require('../../controllers/SCHOOL-ADMIN/timetable.Controller');
 const upload = require('../../middlewares/upload');
 
 const router = express.Router();
@@ -31,8 +32,10 @@ router.patch("/class/:id/status",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),c
 
 // SECTION
 router.get("/sections",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),sectionController.index);
+router.get("/sections/all-sections",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),sectionController.getAllSection);
 router.post("/section/create",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),sectionController.store);
 router.get("/section/:id",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),sectionController.show);
+router.get("/section/:sectionId/students",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),sectionController.getStudentBySection);
 router.put("/section/:id",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),sectionController.update);
 router.patch("/section/:id/status",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),sectionController.status);
 router.delete("/section/:id",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),sectionController.delete);
@@ -40,6 +43,7 @@ router.delete("/section/:id",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),secti
 
 // SUBJECT
 router.get("/subjects",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),subjectController.index);
+router.get("/subjects/all-subjects",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),subjectController.getAllSubjects);
 router.post("/subject/create",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),subjectController.store);
 router.patch("/subject/:id/status",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),subjectController.status);
 router.put("/subject/:id",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),subjectController.update);
@@ -49,20 +53,58 @@ router.delete("/subject/:id",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),subje
 
 // TEACHER
 router.get("/employees",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),teacherController.index);
-router.get("/teachers/all-employees",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),teacherController.getallTeacher);
+router.get("/teachers",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),teacherController.teacherIndex);
+router.get("/teacher-subjects",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),teacherController.getTeachersClassIdOrSectionId);
+router.get("/teachers/all-teachers",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),teacherController.getallTeacher);
 router.post("/employee/create",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),teacherController.store);
 router.patch("/employee/:id/status",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),teacherController.status);
 router.get("/employee/:id",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),teacherController.show);
 router.delete("/employee/:id",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),teacherController.delete);
 router.put("/employee/:id",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),upload.single('image'),teacherController.update);
+router.put("/teacher-subject/:teacherId",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),teacherController.assignTeacherSubject);
+
+
+// timeTable
+router.get("/timetables",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),timeTableController.index);
+router.get("/timetables/:id",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),timeTableController.show);
+router.patch("/timetables/:id/status",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),timeTableController.status);
+router.patch("/timetables/:timetableId/periods/:periodId/periodMasterId/:periodMasterId/break",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),timeTableController.toggleBreakStatus);
+router.put("/timetables/:id",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),timeTableController.updateTimetable);
+router.post("/timetables/create",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),timeTableController.createTimetable);
 
 
 // STUDENT
 router.get("/students/generate-admission-no",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),studentController.generateAdmissionNo);
 router.post("/students/create",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),studentController.store);
+router.post("/students/promote",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),studentController.promotion);
 router.get("/students",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),studentController.index);
+router.get("/students/history",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),studentController.studentHistory);
+router.get("/students/:studentId/enrollment-history",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),
+studentController.studentEnrollmentHistory);
 router.get("/students/:id",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),studentController.show);
+router.patch("/students/:id/status",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),studentController.status);
+
+// parent status
+router.patch("/students/:id/parent-status",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),studentController.parentStatus);
 router.put("/students/:id",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),upload.single('image'),
 studentController.update);
+
+// ✅ Transfer Certificate Routes
+router.get(
+    "/students/:studentId/tc",
+    authMiddleware,
+    authorizeRoles("SCHOOL_ADMIN"),
+    studentController.getTC
+);
+
+router.post(
+    "/students/:studentId/tc-download",
+    authMiddleware,
+    authorizeRoles("SCHOOL_ADMIN"),
+    studentController.tcDownload
+);
+
+
+
 
 module.exports = router;

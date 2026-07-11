@@ -90,6 +90,7 @@ model User {
 
 
   auditLogs           AuditLog[]
+  transferCertificates TransferCertificate[]
 }
 
 model School {
@@ -130,8 +131,12 @@ model School {
   students        Student[]
   subjects        Subject[]
   teachers        Teacher[]
+  timetables  Timetable[]
   users           User[]
   teacherSubjects TeacherSubject[]
+  timetableConfigs TimetableConfig[]
+  studentEnrollments StudentEnrollment[]
+  transferCertificates TransferCertificate[]
 
   @@index([schoolCode])
 }
@@ -151,6 +156,10 @@ model AcademicSession {
   sections    Section[]
   subjects    Subject[]
   teachers    Teacher[]
+  timetables  Timetable[]
+  timetableConfigs TimetableConfig[]
+  studentEnrollments StudentEnrollment[]
+  transferCertificates TransferCertificate[]
 
 
 
@@ -173,6 +182,9 @@ model Class {
   sections   Section[]
   students   Student[]
   teacherSubjects TeacherSubject[]
+  studentEnrollments StudentEnrollment[]
+  timetables  Timetable[]
+  timetableConfigs TimetableConfig[]
 
   @@unique([schoolId, sessionId, className])
   @@index([schoolId])
@@ -201,9 +213,13 @@ model Section {
   sessionId  String?
   session    AcademicSession? @relation(fields: [sessionId], references: [id])
   students    Student[]
-   teacherSubjects   TeacherSubject[]
+  teacherSubjects   TeacherSubject[]
+  timetables  Timetable[]
+  studentEnrollments StudentEnrollment[]
+  timetableConfigs TimetableConfig[]
 
-  @@unique([classId, sectionName])
+// Session-wise unique
+  @@unique([classId,sessionId, sectionName])
   @@index([schoolId])
   @@index([classId])
 }
@@ -223,6 +239,7 @@ model Subject {
   status      Boolean  @default(true)
 
   teacherSubjects TeacherSubject[]
+  periods     TimetablePeriod[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -232,10 +249,34 @@ model Subject {
   sessionId  String?
   session    AcademicSession? @relation(fields: [sessionId], references: [id])
 
-  @@unique([schoolId, subjectCode])
-  @@unique([schoolId, subjectName])
+  // Session-wise unique
+  @@unique([schoolId, sessionId, subjectCode])
+  @@unique([schoolId, sessionId, subjectName])
 
   @@index([schoolId])
+  @@index([sessionId])
+}
+
+
+enum EmployeeType {
+  TEACHER
+  ACCOUNTANT
+  CLERK
+  LIBRARIAN
+  RECEPTIONIST
+  PRINCIPAL
+  VICE_PRINCIPAL
+  COORDINATOR
+  SPORTS_TEACHER
+  LAB_ASSISTANT
+  TRANSPORT_MANAGER
+  DRIVER
+  CONDUCTOR
+  SECURITY_GUARD
+  PEON
+  HOSTEL_WARDEN
+  NURSE
+  OTHER
 }
 
 model Teacher {
@@ -246,6 +287,8 @@ model Teacher {
   firstName     String
   lastName      String?
   gender        Gender?
+  type          EmployeeType @default(TEACHER)
+  notes         String?
 
   email         String?
   mobile        String?
@@ -269,12 +312,16 @@ model Teacher {
   session    AcademicSession? @relation(fields: [sessionId], references: [id])
 
   subjects      TeacherSubject[]
+  
+  timetablePeriods TimetablePeriod[] @relation("TeacherPeriods")
 
   classTeacherSections   Section[] @relation("ClassTeacher")
   coClassTeacherSections Section[] @relation("CoClassTeacher")
 
-  @@unique([schoolId, employeeId])
+  // Session-wise unique
+  @@unique([schoolId, sessionId, employeeId])
   @@index([schoolId])
+  @@index([sessionId])
 }
 
 model TeacherSubject {
@@ -415,6 +462,8 @@ model Student {
   user            User? @relation(fields: [userId], references: [id])
 
   transportInfo StudentTransport?
+  studentEnrollments StudentEnrollment[]
+  transferCertificates TransferCertificate[]
 
   @@unique([schoolId, admissionNo])
   @@unique([schoolId, email])
@@ -433,7 +482,7 @@ model StudentTransport{
 
     studentId String @unique
 
-    required Boolean @default(false)
+    transportRequired Boolean @default(false)
 
     pickupPoint String?
     pickupTime String?
@@ -446,6 +495,288 @@ model StudentTransport{
 
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
+}
+
+enum PromotionResult {
+  PROMOTED
+  FAILED
+  RETAINED
+}
+
+model StudentEnrollment {
+
+  id String @id @default(uuid())
+
+  schoolId String
+
+  studentId String
+  sessionId String
+  classId String
+  sectionId String
+
+  rollNo Int?
+
+  promotionResult PromotionResult
+
+  promotedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  school School @relation(fields:[schoolId], references:[id])
+
+  student Student @relation(fields:[studentId], references:[id], onDelete: Cascade)
+
+  session AcademicSession @relation(fields:[sessionId], references:[id], onDelete: Cascade)
+
+  class Class @relation(fields:[classId], references:[id], onDelete: Cascade)
+
+  section Section @relation(fields:[sectionId], references:[id], onDelete: Cascade)
+
+  @@unique([studentId, sessionId])
+
+  @@index([schoolId])
+  @@index([studentId])
+  @@index([sessionId])
+  @@index([classId])
+  @@index([sectionId])
+  @@index([promotionResult])
+}
+
+enum TCStatus {
+  ISSUED
+  CANCELLED
+}
+
+model TransferCertificate {
+  id          String   @id @default(uuid())
+  tcNumber    String   @unique
+
+  // Relations
+  studentId   String
+  schoolId    String
+  sessionId   String?
+  createdById String?
+
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  session      AcademicSession? @relation(fields: [sessionId], references: [id])
+  createdBy    User?    @relation(fields: [createdById], references: [id])
+
+  // Student Snapshot
+  admissionNo     String?
+  studentName     String?
+  fatherName      String?
+  motherName      String?
+  dateOfBirth     DateTime?
+  admissionDate   DateTime?
+  nationality     String?
+  category        String?
+  className       String?
+  sectionName     String?
+  board           String?
+  medium          String?
+
+  // TC Details
+  applicationDate    DateTime?
+  lastAttendanceDate DateTime?
+  issueDate          DateTime @default(now())
+
+  reason             String?
+  conduct            String?
+  remarks            String?
+  promotedToClass    String?
+  result             String?
+
+  // Attendance
+  workingDays        Int?
+  presentDays        Int?
+
+  // Other Information
+  subjects           String?
+  duesPaid           Boolean?
+  concession         Boolean?
+  nccScout           Boolean?
+  activities         Boolean?
+
+  // Register Details
+  bookNo             String?
+  srNo               String?
+
+  // PDF
+  pdfUrl             String?
+
+  // Status
+  status             TCStatus @default(ISSUED)
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  deletedAt          DateTime?
+
+  @@index([studentId])
+  @@index([schoolId])
+  @@index([sessionId])
+  @@index([createdById])
+  @@index([tcNumber])
+
+  @@map("transfer_certificates")
+}
+
+
+
+enum TimetableType {
+  CLASS_WISE
+  DAY_WISE
+  TEACHER_WISE
+}
+
+enum TimetableStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+
+
+model Timetable {
+  id         String @id @default(uuid())
+
+  name       String
+  classId    String
+  sectionId  String
+  
+  schoolId   String
+  sessionId  String
+  status     TimetableStatus @default(DRAFT)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  class       Class?            @relation(fields: [classId], references: [id])
+  section     Section?          @relation(fields: [sectionId], references: [id])
+  school      School            @relation(fields: [schoolId], references: [id])
+  session     AcademicSession   @relation(fields: [sessionId], references: [id])
+
+  periods     TimetablePeriod[]
+
+  @@unique([schoolId, sessionId, classId, sectionId])
+  @@map("timetables")
+}
+
+model TimetablePeriod {
+
+  id          String @id @default(uuid())
+
+  timetableId String
+
+  day         DayOfWeek
+
+  subjectId   String?
+  teacherId   String?
+  periodMasterId String
+  roomNo      String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  timetable   Timetable @relation(fields: [timetableId], references: [id], onDelete: Cascade)
+  subject     Subject?  @relation(fields: [subjectId], references: [id])
+  teacher     Teacher?  @relation("TeacherPeriods", fields: [teacherId], references: [id])
+  periodMaster   PeriodMaster @relation(fields: [periodMasterId], references: [id])
+
+  @@unique([timetableId, day,periodMasterId])
+
+  @@map("timetable_periods")
+}
+
+enum WeekDay {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+model TimetableConfig {
+  id               String   @id @default(uuid())
+
+  schoolId         String
+  sessionId        String?
+
+  classId          String
+  sectionId        String
+
+  startTime        String
+  endTime          String
+
+  slotDuration     Int
+  breakDuration    Int
+  lunchDuration    Int
+
+  lunchStart       String?
+  enableLunchBreak Boolean @default(false)
+
+  breakAfterSlots  Int
+  totalSlotsPerDay Int
+
+  schoolDays       WeekDay[]
+
+  isActive         Boolean  @default(true)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relations
+  school           School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  session          AcademicSession?   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  class            Class              @relation(fields: [classId], references: [id], onDelete: Cascade)
+  section          Section?           @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  periods          PeriodMaster[]
+
+  @@unique([schoolId, sessionId, classId, sectionId])
+
+  @@index([schoolId])
+  @@index([sessionId])
+  @@index([classId])
+  @@index([sectionId])
+}
+
+
+
+model PeriodMaster {
+  id                String   @id @default(uuid())
+
+  timetableConfigId String
+
+  periodNo          Int
+  name              String
+
+  startTime         String
+  endTime           String
+
+  isBreak           Boolean @default(false)
+  status            Boolean @default(true)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  timetableConfig   TimetableConfig @relation(fields: [timetableConfigId], references: [id], onDelete: Cascade)
+
+  timetablePeriods  TimetablePeriod[]
+
+  @@unique([timetableConfigId, periodNo])
+  @@index([timetableConfigId])
 }
 
 model AuditLog {

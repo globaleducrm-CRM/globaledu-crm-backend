@@ -646,8 +646,6 @@ exports.resetPassword = async (req, res) => {
 
 };
 
-
-
 exports.changePassword = async (req, res) => {
     try {
         const { currentPassword, newPassword } = req.body;

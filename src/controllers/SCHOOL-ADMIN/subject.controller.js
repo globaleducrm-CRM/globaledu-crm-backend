@@ -6,25 +6,11 @@ const prisma = new PrismaClient();
 exports.index = async (req, res) => {
     try {
         const { page, limit, skip } = getPagination(req)
-        const search = req.query.search
-
-        const currentSession = await prisma.academicSession.findFirst({
-            where: {
-                schoolId: req.user.schoolId,
-                isCurrent: true,
-            },
-        });
-
-        if (!currentSession) {
-            return res.status(404).json({
-                success: false,
-                message: "Current academic session not found.",
-            });
-        }
+        const search = req.query.search;
 
         const where = {
             schoolId: req.user.schoolId,
-            sessionId: currentSession.id,
+            // sessionId: currentSession.id,
 
             ...(search && {
                 OR: [
@@ -63,10 +49,10 @@ exports.index = async (req, res) => {
         return res.status(200).json({
             success: true,
             message: "Subjects fetched successfully.",
-            session: {
-                id: currentSession.id,
-                sessionName: currentSession.sessionName,
-            },
+            // session: {
+            //     id: currentSession.id,
+            //     sessionName: currentSession.sessionName,
+            // },
             data: subjects,
 
             pagination: getPaginationMeta(page, limit, totalSubjects)
@@ -79,6 +65,44 @@ exports.index = async (req, res) => {
             message: "Internal Server Error.",
         });
     }
+};
+
+
+exports.getAllSubjects = async (req, res) => {
+  try {
+    const { classId, sectionId } = req.query;
+
+    const where = {
+      schoolId: req.user.schoolId,
+      status: true,
+    };
+
+    if (classId) {
+      where.classId = classId;
+    }
+
+    if (sectionId) {
+      where.sectionId = sectionId;
+    }
+
+    const subjects = await prisma.subject.findMany({
+      where,
+      orderBy: {
+        subjectName: "asc",
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Subjects fetched successfully.",
+      data: subjects,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
 
 exports.store = async (req, res) => {
@@ -115,6 +139,7 @@ exports.store = async (req, res) => {
         const existingSubject = await prisma.subject.findFirst({
             where: {
                 schoolId: req.user.schoolId,
+                sessionId: currentSession.id,
                 OR: [
                     {
                         subjectCode
@@ -129,19 +154,20 @@ exports.store = async (req, res) => {
             }
         });
 
-        if (existingSubject) {
+         if (existingSubject) {
             return res.status(409).json({
                 success: false,
                 message:
-                    existingSubject.subjectCode === subjectCode
-                        ? "Subject code already exists."
-                        : "Subject name already exists."
+                    existingSubject.subjectCode.toUpperCase() === subjectCode
+                        ? "Subject code already exists in the current academic session."
+                        : "Subject name already exists in the current academic session."
             });
         }
 
         const subject = await prisma.subject.create({
             data: {
                 schoolId: req.user.schoolId,
+                sessionId: currentSession.id,
                 subjectName,
                 subjectCode,
                 shortName,
@@ -175,7 +201,7 @@ exports.status = async (req, res) => {
             where: {
                 id,
                 schoolId: req.user.schoolId,
-                sessionId: currentSession.id,
+              
             },
         });
 

@@ -10,10 +10,14 @@ exports.index = async (req, res) => {
     try {
         const { page, limit, skip } = getPagination(req);
         const search = req.query.search?.trim();
-        const status = req.query.status;
+        const { status, classId, sectionId, qualification } = req.query;
 
         const where = {
             schoolId: req.user.schoolId,
+
+            ...(status !== undefined && {
+                status: status === "true",
+            }),
 
             ...(search && {
                 OR: [
@@ -49,12 +53,22 @@ exports.index = async (req, res) => {
                     },
                 ],
             }),
-        };
 
-        // Status Filter
-        if (status !== undefined) {
-            where.status = status === "true";
-        }
+            ...((classId || sectionId) && {
+                subjects: {
+                    some: {
+                        ...(classId && { classId }),
+                        ...(sectionId && { sectionId }),
+                    },
+                },
+            }),
+            ...(qualification && {
+                qualification: {
+                    contains: qualification,
+                    mode: "insensitive",
+                },
+            }),
+        };
 
         const totalTeachers = await prisma.teacher.count({
             where,
@@ -79,17 +93,85 @@ exports.index = async (req, res) => {
                 experience: true,
                 salary: true,
                 joiningDate: true,
-                dob:true,
-                image:true,
+                dob: true,
+                image: true,
+                type: true,
+                notes: true,
                 status: true,
                 createdAt: true,
+
+                subjects: {
+                    select: {
+                        class: {
+                            select: {
+                                id: true,
+                                className: true,
+                                sortName: true,
+                            },
+                        },
+                        section: {
+                            select: {
+                                id: true,
+                                sectionName: true,
+                            },
+                        },
+                        subject: {
+                            select: {
+                                id: true,
+                                subjectName: true,
+                                shortName: true,
+                            },
+                        },
+                    },
+                },
             },
+        });
+
+        const formattedTeachers = teachers.map((teacher) => {
+            const classesCanTeach = [
+                ...new Set(
+                    teacher.subjects.map(
+                        (item) =>
+                            `${item.class.sortName || item.class.className} - ${item.section.sectionName}`
+                    )
+                ),
+            ];
+
+            const subjectsCanTeach = [
+                ...new Set(
+                    teacher.subjects.map(
+                        (item) => item.subject.subjectName
+                    )
+                ),
+            ];
+
+            return {
+                id: teacher.id,
+                employeeId: teacher.employeeId,
+                firstName: teacher.firstName,
+                lastName: teacher.lastName,
+                gender: teacher.gender,
+                email: teacher.email,
+                mobile: teacher.mobile,
+                qualification: teacher.qualification,
+                experience: teacher.experience,
+                salary: teacher.salary,
+                joiningDate: teacher.joiningDate,
+                dob: teacher.dob,
+                image: teacher.image,
+                status: teacher.status,
+                type: teacher.type,
+                notes: teacher.notes,
+                createdAt: teacher.createdAt,
+                classesCanTeach,
+                subjectsCanTeach,
+            };
         });
 
         return res.status(200).json({
             success: true,
             message: "Teachers fetched successfully.",
-            data: teachers,
+            data: formattedTeachers,
             pagination: getPaginationMeta(page, limit, totalTeachers),
         });
 
@@ -104,34 +186,285 @@ exports.index = async (req, res) => {
 };
 
 
-exports.getallTeacher = async(req,res)=>{
-   try {
-    const teachers = await prisma.teacher.findMany({
-      where: {
-        schoolId: req.user.schoolId,
-        status: true,
-      },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        qualification: true,
-      },
-      orderBy: {
-        firstName: "asc",
-      },
-    });
+exports.teacherIndex = async (req, res) => {
+    try {
+        const { page, limit, skip } = getPagination(req);
+        const search = req.query.search?.trim();
+        const { status, classId, sectionId, qualification } = req.query;
 
-    return res.status(200).json({
-      success: true,
-      data: teachers,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
+        const where = {
+            schoolId: req.user.schoolId,
+            type: "TEACHER",
+
+            ...(status !== undefined && {
+                status: status === "true",
+            }),
+
+            ...(search && {
+                OR: [
+                    {
+                        employeeId: {
+                            contains: search,
+                            mode: "insensitive",
+                        },
+                    },
+                    {
+                        firstName: {
+                            contains: search,
+                            mode: "insensitive",
+                        },
+                    },
+                    {
+                        lastName: {
+                            contains: search,
+                            mode: "insensitive",
+                        },
+                    },
+                    {
+                        email: {
+                            contains: search,
+                            mode: "insensitive",
+                        },
+                    },
+                    {
+                        mobile: {
+                            contains: search,
+                            mode: "insensitive",
+                        },
+                    },
+                ],
+            }),
+
+            ...((classId || sectionId) && {
+                subjects: {
+                    some: {
+                        ...(classId && { classId }),
+                        ...(sectionId && { sectionId }),
+                    },
+                },
+            }),
+            ...(qualification && {
+                qualification: {
+                    contains: qualification,
+                    mode: "insensitive",
+                },
+            }),
+        };
+
+        const totalTeachers = await prisma.teacher.count({
+            where,
+        });
+
+        const teachers = await prisma.teacher.findMany({
+            where,
+            skip,
+            take: limit,
+            orderBy: {
+                createdAt: "desc",
+            },
+            select: {
+                id: true,
+                employeeId: true,
+                firstName: true,
+                lastName: true,
+                gender: true,
+                email: true,
+                mobile: true,
+                qualification: true,
+                experience: true,
+                salary: true,
+                joiningDate: true,
+                dob: true,
+                image: true,
+                type: true,
+                notes: true,
+                status: true,
+                createdAt: true,
+
+                subjects: {
+                    select: {
+                        class: {
+                            select: {
+                                id: true,
+                                className: true,
+                                sortName: true,
+                            },
+                        },
+                        section: {
+                            select: {
+                                id: true,
+                                sectionName: true,
+                            },
+                        },
+                        subject: {
+                            select: {
+                                id: true,
+                                subjectName: true,
+                                shortName: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        const formattedTeachers = teachers.map((teacher) => {
+            const classesCanTeach = [
+                ...new Set(
+                    teacher.subjects.map(
+                        (item) =>
+                            `${item.class.sortName || item.class.className} - ${item.section.sectionName}`
+                    )
+                ),
+            ];
+
+            const subjectsCanTeach = [
+                ...new Set(
+                    teacher.subjects.map(
+                        (item) => item.subject.subjectName
+                    )
+                ),
+            ];
+
+            return {
+                id: teacher.id,
+                employeeId: teacher.employeeId,
+                firstName: teacher.firstName,
+                lastName: teacher.lastName,
+                gender: teacher.gender,
+                email: teacher.email,
+                mobile: teacher.mobile,
+                qualification: teacher.qualification,
+                experience: teacher.experience,
+                salary: teacher.salary,
+                joiningDate: teacher.joiningDate,
+                dob: teacher.dob,
+                image: teacher.image,
+                status: teacher.status,
+                type: teacher.type,
+                notes: teacher.notes,
+                createdAt: teacher.createdAt,
+                classesCanTeach,
+                subjectsCanTeach,
+            };
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Teachers fetched successfully.",
+            data: formattedTeachers,
+            pagination: getPaginationMeta(page, limit, totalTeachers),
+        });
+
+    } catch (error) {
+        console.error("Teacher Index Error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+};
+
+
+exports.getTeachersClassIdOrSectionId = async (req, res) => {
+    try {
+        const { classId, sectionId, teacherId,subjectId } = req.query;
+
+        const where = {
+            schoolId: req.user.schoolId,
+            ...(classId && { classId }),
+            ...(sectionId && { sectionId }),
+            ...(teacherId && { teacherId }),
+            ...(subjectId && { subjectId }),
+        };
+
+        const teacherSubjects = await prisma.teacherSubject.findMany({
+            where,
+            include: {
+                teacher: {
+                    select: {
+                        id: true,
+                        employeeId: true,
+                        firstName: true,
+                        lastName: true,
+                        qualification: true,
+                    },
+                },
+                subject: {
+                    select: {
+                        id: true,
+                        subjectName: true,
+                        shortName: true,
+                        subjectCode: true,
+                    },
+                },
+                class: {
+                    select: {
+                        id: true,
+                        className: true,
+                        sortName: true,
+                    },
+                },
+                section: {
+                    select: {
+                        id: true,
+                        sectionName: true,
+                    },
+                },
+            },
+            orderBy: {
+                teacher: {
+                    firstName: "asc",
+                },
+            },
+        });
+
+        return res.status(200).json({
+            success: true,
+            count: teacherSubjects.length,
+            data: teacherSubjects,
+        });
+
+    } catch (error) {
+        console.error("Teacher Subject Error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+};
+
+exports.getallTeacher = async (req, res) => {
+    try {
+        const teachers = await prisma.teacher.findMany({
+            where: {
+                schoolId: req.user.schoolId,
+                status: true,
+                type: "TEACHER"
+            },
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                qualification: true,
+            },
+            orderBy: {
+                firstName: "asc",
+            },
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: teachers,
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
 }
 
 exports.store = async (req, res) => {
@@ -147,6 +480,8 @@ exports.store = async (req, res) => {
             experience,
             salary,
             joiningDate,
+            type,
+            notes
         } = req.body;
 
         // ✅ Validation
@@ -154,6 +489,50 @@ exports.store = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "Employee ID and First Name are required.",
+            });
+        }
+
+        const allowedTypes = [
+            "TEACHER",
+            "ACCOUNTANT",
+            "CLERK",
+            "LIBRARIAN",
+            "RECEPTIONIST",
+            "PRINCIPAL",
+            "VICE_PRINCIPAL",
+            "COORDINATOR",
+            "SPORTS_TEACHER",
+            "LAB_ASSISTANT",
+            "TRANSPORT_MANAGER",
+            "DRIVER",
+            "CONDUCTOR",
+            "SECURITY_GUARD",
+            "PEON",
+            "HOSTEL_WARDEN",
+            "NURSE",
+            "OTHER"
+        ];
+
+        type = type?.trim().toUpperCase() || "TEACHER";
+
+        if (!allowedTypes.includes(type)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid employee type."
+            });
+        }
+
+        const currentSession = await prisma.academicSession.findFirst({
+            where: {
+                schoolId: req.user.schoolId,
+                isCurrent: true,
+            },
+        });
+
+        if (!currentSession) {
+            return res.status(404).json({
+                success: false,
+                message: "Current academic session not found.",
             });
         }
 
@@ -279,6 +658,7 @@ exports.store = async (req, res) => {
         const teacher = await prisma.teacher.create({
             data: {
                 schoolId: req.user.schoolId,
+                sessionId: currentSession.id,
                 userId: user.id, // relation
                 employeeId: employeeId,
                 firstName: firstName,
@@ -290,6 +670,7 @@ exports.store = async (req, res) => {
                 experience: experience ? Number(experience) : null,
                 salary: salary ? Number(salary) : null,
                 joiningDate: joiningDate ? new Date(joiningDate) : null,
+                type: type,
                 status: true
             }
         });
@@ -507,40 +888,162 @@ exports.status = async (req, res) => {
 exports.show = async (req, res) => {
     try {
         const { id } = req.params;
+        const schoolId = req.user.schoolId;
 
         if (!id) {
             return res.status(400).json({
                 success: false,
-                message: "Teacher ID is required."
+                message: "Teacher ID is required.",
             });
         }
 
         const teacher = await prisma.teacher.findFirst({
             where: {
                 id,
-                schoolId: req.user.schoolId
-            }
+                schoolId,
+            },
+            select: {
+                id: true,
+                employeeId: true,
+                firstName: true,
+                lastName: true,
+                gender: true,
+                email: true,
+                mobile: true,
+                dob: true,
+                qualification: true,
+                experience: true,
+                salary: true,
+                joiningDate: true,
+                image: true,
+                status: true,
+                createdAt: true,
+
+                subjects: {
+                    select: {
+                        classId: true,
+                        sectionId: true,
+                        subjectId: true,
+
+                        class: {
+                            select: {
+                                id: true,
+                                className: true,
+                                sortName: true,
+                            },
+                        },
+
+                        section: {
+                            select: {
+                                id: true,
+                                sectionName: true,
+                            },
+                        },
+
+                        subject: {
+                            select: {
+                                id: true,
+                                subjectName: true,
+                                shortName: true,
+                            },
+                        },
+                    },
+                    orderBy: [
+                        {
+                            class: {
+                                className: "asc",
+                            },
+                        },
+                        {
+                            section: {
+                                sectionName: "asc",
+                            },
+                        },
+                        {
+                            subject: {
+                                subjectName: "asc",
+                            },
+                        },
+                    ],
+                },
+            },
         });
 
         if (!teacher) {
             return res.status(404).json({
                 success: false,
-                message: "Teacher not found."
+                message: "Teacher not found.",
             });
         }
+
+        // Group Class -> Section -> Subjects
+        const assignmentMap = {};
+
+        teacher.subjects.forEach((item) => {
+            if (!assignmentMap[item.classId]) {
+                assignmentMap[item.classId] = {
+                    classId: item.class.id,
+                    className: item.class.className,
+                    sortName: item.class.sortName,
+                    sections: {},
+                };
+            }
+
+            if (!assignmentMap[item.classId].sections[item.sectionId]) {
+                assignmentMap[item.classId].sections[item.sectionId] = {
+                    sectionId: item.section.id,
+                    sectionName: item.section.sectionName,
+                    subjectIds: [],
+                    subjects: [],
+                };
+            }
+
+            assignmentMap[item.classId].sections[item.sectionId].subjectIds.push(
+                item.subject.id
+            );
+
+            assignmentMap[item.classId].sections[item.sectionId].subjects.push({
+                id: item.subject.id,
+                subjectName: item.subject.subjectName,
+                shortName: item.subject.shortName,
+            });
+        });
+
+        const assignments = Object.values(assignmentMap).map((cls) => ({
+            classId: cls.classId,
+            className: cls.className,
+            sortName: cls.sortName,
+            sections: Object.values(cls.sections),
+        }));
 
         return res.status(200).json({
             success: true,
             message: "Teacher fetched successfully.",
-            data: teacher
+            data: {
+                id: teacher.id,
+                employeeId: teacher.employeeId,
+                firstName: teacher.firstName,
+                lastName: teacher.lastName,
+                gender: teacher.gender,
+                email: teacher.email,
+                mobile: teacher.mobile,
+                dob: teacher.dob,
+                qualification: teacher.qualification,
+                experience: teacher.experience,
+                salary: teacher.salary,
+                joiningDate: teacher.joiningDate,
+                image: teacher.image,
+                status: teacher.status,
+                createdAt: teacher.createdAt,
+                assignments,
+            },
         });
-
     } catch (error) {
         console.error("Show Teacher Error:", error);
 
         return res.status(500).json({
             success: false,
-            message: error.message
+            message: error.message,
         });
     }
 };
@@ -548,8 +1051,8 @@ exports.show = async (req, res) => {
 exports.update = async (req, res) => {
     try {
 
-        const {id} = req.params;
-      
+        const { id } = req.params;
+
 
         let {
             employeeId,
@@ -562,6 +1065,8 @@ exports.update = async (req, res) => {
             experience,
             salary,
             joiningDate,
+            type,
+            notes,
             dob,
         } = req.body;
 
@@ -570,6 +1075,50 @@ exports.update = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "Employee ID and First Name are required."
+            });
+        }
+
+        const allowedTypes = [
+            "TEACHER",
+            "ACCOUNTANT",
+            "CLERK",
+            "LIBRARIAN",
+            "RECEPTIONIST",
+            "PRINCIPAL",
+            "VICE_PRINCIPAL",
+            "COORDINATOR",
+            "SPORTS_TEACHER",
+            "LAB_ASSISTANT",
+            "TRANSPORT_MANAGER",
+            "DRIVER",
+            "CONDUCTOR",
+            "SECURITY_GUARD",
+            "PEON",
+            "HOSTEL_WARDEN",
+            "NURSE",
+            "OTHER"
+        ];
+
+        type = type?.trim().toUpperCase() || "TEACHER";
+
+        if (!allowedTypes.includes(type)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid employee type."
+            });
+        }
+
+        const currentSession = await prisma.academicSession.findFirst({
+            where: {
+                schoolId: req.user.schoolId,
+                isCurrent: true,
+            },
+        });
+
+        if (!currentSession) {
+            return res.status(404).json({
+                success: false,
+                message: "Current academic session not found.",
             });
         }
 
@@ -689,6 +1238,7 @@ exports.update = async (req, res) => {
             },
             data: {
                 employeeId,
+                sessionId: currentSession.id,
                 firstName,
                 lastName,
                 gender,
@@ -699,6 +1249,8 @@ exports.update = async (req, res) => {
                 salary: salary ? Number(salary) : null,
                 dob: dob ? new Date(dob) : null,
                 image: image || null,
+                type: type,
+                notes: notes || null,
                 joiningDate: joiningDate ? new Date(joiningDate) : null
             }
         });
@@ -810,6 +1362,454 @@ exports.delete = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: error.message
+        });
+    }
+};
+
+
+// exports.assignTeacherSubject = async (req, res) => {
+//     try {
+//         const { teacherId } = req.params;
+//         const { assignments } = req.body;
+//         const schoolId = req.user.schoolId;
+
+//         // Validate assignments
+//         if (!Array.isArray(assignments) || assignments.length === 0) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: "Assignments are required.",
+//             });
+//         }
+
+//         // Check Teacher
+//         const teacher = await prisma.teacher.findFirst({
+//             where: {
+//                 id: teacherId,
+//                 schoolId,
+//             },
+//         });
+
+//         if (!teacher) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: "Teacher not found.",
+//             });
+//         }
+
+//         const teacherSubjectData = [];
+
+//         // Validate & Prepare Data
+//         for (const assignment of assignments) {
+//             const { classId, sectionIds, subjectIds } = assignment;
+
+//             if (
+//                 !classId ||
+//                 !Array.isArray(sectionIds) ||
+//                 sectionIds.length === 0 ||
+//                 !Array.isArray(subjectIds) ||
+//                 subjectIds.length === 0
+//             ) {
+//                 return res.status(400).json({
+//                     success: false,
+//                     message:
+//                         "Each assignment must contain classId, sectionIds and subjectIds.",
+//                 });
+//             }
+
+//             // Validate Class
+//             const existingClass = await prisma.class.findFirst({
+//                 where: {
+//                     id: classId,
+//                     schoolId,
+//                 },
+//             });
+
+//             if (!existingClass) {
+//                 return res.status(404).json({
+//                     success: false,
+//                     message: `Class not found: ${classId}`,
+//                 });
+//             }
+
+//             // Validate Sections
+//             const sections = await prisma.section.findMany({
+//                 where: {
+//                     id: {
+//                         in: sectionIds,
+//                     },
+//                     classId,
+//                     schoolId,
+//                 },
+//                 select: {
+//                     id: true,
+//                 },
+//             });
+
+//             if (sections.length !== sectionIds.length) {
+//                 return res.status(404).json({
+//                     success: false,
+//                     message:
+//                         "One or more sections are invalid for the selected class.",
+//                 });
+//             }
+
+//             // Validate Subjects
+//             const subjects = await prisma.subject.findMany({
+//                 where: {
+//                     id: {
+//                         in: subjectIds,
+//                     },
+//                     schoolId,
+//                 },
+//                 select: {
+//                     id: true,
+//                 },
+//             });
+
+//             if (subjects.length !== subjectIds.length) {
+//                 return res.status(404).json({
+//                     success: false,
+//                     message: "One or more subjects not found.",
+//                 });
+//             }
+
+//             // Prepare Data
+//             for (const sectionId of sectionIds) {
+//                 for (const subjectId of subjectIds) {
+//                     teacherSubjectData.push({
+//                         schoolId,
+//                         teacherId,
+//                         classId,
+//                         sectionId,
+//                         subjectId,
+//                     });
+//                 }
+//             }
+//         }
+
+//         // Save
+//         await prisma.teacherSubject.createMany({
+//             data: teacherSubjectData,
+//             skipDuplicates: true,
+//         });
+
+//         // Fetch Assigned Subjects
+//         const assignedSubjects = await prisma.teacherSubject.findMany({
+//             where: {
+//                 teacherId,
+//                 schoolId,
+//             },
+//             include: {
+//                 teacher: {
+//                     select: {
+//                         id: true,
+//                         firstName: true,
+//                         lastName: true,
+//                     },
+//                 },
+//                 class: {
+//                     select: {
+//                         id: true,
+//                         className: true,
+//                     },
+//                 },
+//                 section: {
+//                     select: {
+//                         id: true,
+//                         sectionName: true,
+//                     },
+//                 },
+//                 subject: {
+//                     select: {
+//                         id: true,
+//                         subjectName: true,
+//                         shortName: true,
+//                     },
+//                 },
+//             },
+//             orderBy: [
+//                 {
+//                     class: {
+//                         className: "asc",
+//                     },
+//                 },
+//                 {
+//                     section: {
+//                         sectionName: "asc",
+//                     },
+//                 },
+//                 {
+//                     subject: {
+//                         subjectName: "asc",
+//                     },
+//                 },
+//             ],
+//         });
+
+//         return res.status(201).json({
+//             success: true,
+//             message: "Teacher subjects assigned successfully.",
+//             totalAssigned: teacherSubjectData.length,
+//             data: assignedSubjects,
+//         });
+//     } catch (error) {
+//         console.error("Assign Teacher Subject Error:", error);
+
+//         return res.status(500).json({
+//             success: false,
+//             message: "Internal Server Error",
+//             error: error.message,
+//         });
+//     }
+// };
+
+
+
+
+exports.assignTeacherSubject = async (req, res) => {
+    try {
+        const { teacherId } = req.params;
+        const { assignments } = req.body;
+        const schoolId = req.user.schoolId;
+
+        // Validate payload
+        if (!Array.isArray(assignments) || assignments.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Assignments are required.",
+            });
+        }
+
+        // Validate Teacher
+        const teacher = await prisma.teacher.findFirst({
+            where: {
+                id: teacherId,
+                schoolId,
+            },
+        });
+
+        if (!teacher) {
+            return res.status(404).json({
+                success: false,
+                message: "Teacher not found.",
+            });
+        }
+
+        const teacherSubjectData = [];
+
+        for (const assignment of assignments) {
+            const { classId, sections } = assignment;
+
+            if (
+                !classId ||
+                !Array.isArray(sections) ||
+                sections.length === 0
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Each assignment must contain classId and sections.",
+                });
+            }
+
+            // Validate Class
+            const existingClass = await prisma.class.findFirst({
+                where: {
+                    id: classId,
+                    schoolId,
+                },
+            });
+
+            if (!existingClass) {
+                return res.status(404).json({
+                    success: false,
+                    message: `Class not found.`,
+                });
+            }
+
+            for (const section of sections) {
+                const { sectionId, subjectIds } = section;
+
+                if (
+                    !sectionId ||
+                    !Array.isArray(subjectIds) ||
+                    subjectIds.length === 0
+                ) {
+                    return res.status(400).json({
+                        success: false,
+                        message:
+                            "Each section must contain sectionId and subjectIds.",
+                    });
+                }
+
+                // Validate Section
+                const existingSection = await prisma.section.findFirst({
+                    where: {
+                        id: sectionId,
+                        classId,
+                        schoolId,
+                    },
+                });
+
+                if (!existingSection) {
+                    return res.status(404).json({
+                        success: false,
+                        message: `Section not found.`,
+                    });
+                }
+
+                // Remove duplicate subjectIds
+                const uniqueSubjectIds = [...new Set(subjectIds)];
+
+                // Validate Subjects
+                const existingSubjects = await prisma.subject.findMany({
+                    where: {
+                        id: {
+                            in: uniqueSubjectIds,
+                        },
+                        schoolId,
+                    },
+                    select: {
+                        id: true,
+                    },
+                });
+
+                if (existingSubjects.length !== uniqueSubjectIds.length) {
+                    return res.status(404).json({
+                        success: false,
+                        message: "One or more subjects not found.",
+                    });
+                }
+
+                uniqueSubjectIds.forEach((subjectId) => {
+                    teacherSubjectData.push({
+                        schoolId,
+                        teacherId,
+                        classId,
+                        sectionId,
+                        subjectId,
+                    });
+                });
+            }
+        }
+
+        // Transaction
+        await prisma.$transaction(async (tx) => {
+            // Remove old assignments
+            await tx.teacherSubject.deleteMany({
+                where: {
+                    teacherId,
+                    schoolId,
+                },
+            });
+
+            // Insert new assignments
+            await tx.teacherSubject.createMany({
+                data: teacherSubjectData,
+            });
+        });
+
+        // Fetch latest assignments
+        const assignedSubjects = await prisma.teacherSubject.findMany({
+            where: {
+                teacherId,
+                schoolId,
+            },
+            include: {
+                class: {
+                    select: {
+                        id: true,
+                        className: true,
+                        sortName: true,
+                    },
+                },
+                section: {
+                    select: {
+                        id: true,
+                        sectionName: true,
+                    },
+                },
+                subject: {
+                    select: {
+                        id: true,
+                        subjectName: true,
+                        shortName: true,
+                    },
+                },
+            },
+            orderBy: [
+                {
+                    class: {
+                        className: "asc",
+                    },
+                },
+                {
+                    section: {
+                        sectionName: "asc",
+                    },
+                },
+                {
+                    subject: {
+                        subjectName: "asc",
+                    },
+                },
+            ],
+        });
+
+        // Group Response
+        const assignmentMap = {};
+
+        assignedSubjects.forEach((item) => {
+            if (!assignmentMap[item.class.id]) {
+                assignmentMap[item.class.id] = {
+                    classId: item.class.id,
+                    className: item.class.className,
+                    sortName: item.class.sortName,
+                    sections: {},
+                };
+            }
+
+            if (!assignmentMap[item.class.id].sections[item.section.id]) {
+                assignmentMap[item.class.id].sections[item.section.id] = {
+                    sectionId: item.section.id,
+                    sectionName: item.section.sectionName,
+                    subjectIds: [],
+                    subjects: [],
+                };
+            }
+
+            assignmentMap[item.class.id].sections[item.section.id].subjectIds.push(
+                item.subject.id
+            );
+
+            assignmentMap[item.class.id].sections[item.section.id].subjects.push({
+                id: item.subject.id,
+                subjectName: item.subject.subjectName,
+                shortName: item.subject.shortName,
+            });
+        });
+
+        const response = Object.values(assignmentMap).map((cls) => ({
+            classId: cls.classId,
+            className: cls.className,
+            sortName: cls.sortName,
+            sections: Object.values(cls.sections),
+        }));
+
+        return res.status(200).json({
+            success: true,
+            message: "Teacher subjects assigned successfully.",
+            totalAssigned: teacherSubjectData.length,
+            data: response,
+        });
+
+    } catch (error) {
+        console.error("Assign Teacher Subject Error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error",
+            error: error.message,
         });
     }
 };
