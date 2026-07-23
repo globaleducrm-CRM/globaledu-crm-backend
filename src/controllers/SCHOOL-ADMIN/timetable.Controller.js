@@ -1,4 +1,5 @@
-const { PrismaClient } = require('@prisma/client')
+const { PrismaClient } = require('@prisma/client');
+const { getPagination, getPaginationMeta } = require('../../utils/pagination');
 
 const prisma = new PrismaClient();
 
@@ -322,8 +323,7 @@ exports.index = async (req, res) => {
     const schoolId = req.user.schoolId;
 
     const {
-      page = 1,
-      limit = 10,
+    
       search = "",
       sessionId,
       classId,
@@ -331,7 +331,7 @@ exports.index = async (req, res) => {
       status
     } = req.query;
 
-    const skip = (Number(page) - 1) * Number(limit);
+    const { page, limit, skip } = getPagination(req)
 
     // ✅ Build where clause
     const where = {
@@ -494,14 +494,7 @@ exports.index = async (req, res) => {
       success: true,
       message: "Timetables fetched successfully.",
       data: formattedData,
-      pagination: {
-        currentPage: Number(page),
-        perPage: Number(limit),
-        totalRecords: total,
-        totalPages: Math.ceil(total / Number(limit)),
-        hasNextPage: skip + Number(limit) < total,
-        hasPreviousPage: Number(page) > 1
-      }
+      pagination: getPaginationMeta(page, limit, total)
     });
 
   } catch (error) {

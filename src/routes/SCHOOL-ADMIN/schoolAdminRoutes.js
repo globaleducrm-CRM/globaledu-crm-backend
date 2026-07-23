@@ -8,6 +8,13 @@ const subjectController = require('../../controllers/SCHOOL-ADMIN/subject.contro
 const teacherController = require('../../controllers/SCHOOL-ADMIN/teacher.controller');
 const studentController = require('../../controllers/SCHOOL-ADMIN/student.controller');
 const timeTableController = require('../../controllers/SCHOOL-ADMIN/timetable.Controller');
+const timetablereportController = require('../../controllers/SCHOOL-ADMIN/timetablereport.controller');
+const feesHeadController = require('../../controllers/SCHOOL-ADMIN/feesHead.controller');
+const feeStructureController = require('../../controllers/SCHOOL-ADMIN/feeStructure.controller');
+const invoiceFeeController = require('../../controllers/SCHOOL-ADMIN/invoiceFee.controller');
+const feePaymentController = require('../../controllers/SCHOOL-ADMIN/feePayment.controller');
+const feeReceiptController = require('../../controllers/SCHOOL-ADMIN/feeReceipt.controller');
+const studentIdCardController = require('../../controllers/SCHOOL-ADMIN/studentIdCard.controller');
 const upload = require('../../middlewares/upload');
 
 const router = express.Router();
@@ -73,12 +80,17 @@ router.put("/timetables/:id",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),timeT
 router.post("/timetables/create",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),timeTableController.createTimetable);
 
 
+// timeTable
+router.get("/timetable-report/report",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),timetablereportController.index);
+
+
 // STUDENT
 router.get("/students/generate-admission-no",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),studentController.generateAdmissionNo);
 router.post("/students/create",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),studentController.store);
 router.post("/students/promote",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),studentController.promotion);
 router.get("/students",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),studentController.index);
-router.get("/students/history",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),studentController.studentHistory);
+// router.get("/students/history",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),studentController.studentHistory);
+router.get("/transfer-certificates/history",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),studentController.transferCertificateHistory);
 router.get("/students/:studentId/enrollment-history",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),
 studentController.studentEnrollmentHistory);
 router.get("/students/:id",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),studentController.show);
@@ -90,21 +102,60 @@ router.put("/students/:id",authMiddleware,authorizeRoles("SCHOOL_ADMIN"),upload.
 studentController.update);
 
 // ✅ Transfer Certificate Routes
-router.get(
-    "/students/:studentId/tc",
+router.get( "/students/:studentId/tc", authMiddleware, authorizeRoles("SCHOOL_ADMIN"), studentController.getTC);
+
+router.post("/students/:studentId/tc-download", authMiddleware, authorizeRoles("SCHOOL_ADMIN"),  studentController.tcDownload);
+router.post("/students/:studentId/transfer", authMiddleware, authorizeRoles("SCHOOL_ADMIN"),  studentController.transferStudent);
+
+
+
+// feesHeadController
+
+router.get('/fees-head',authMiddleware,authorizeRoles('SCHOOL_ADMIN'),feesHeadController.index)
+router.post('/fees-head',authMiddleware,authorizeRoles('SCHOOL_ADMIN'),feesHeadController.store)
+router.put('/fees-head/:id',authMiddleware,authorizeRoles('SCHOOL_ADMIN'),feesHeadController.edit)
+router.delete('/fees-head/:id',authMiddleware,authorizeRoles('SCHOOL_ADMIN'),feesHeadController.delete)
+
+
+// feesStructureController
+
+router.get("/fee-structures/sessionId/:sessionId/classId/:classId/sectionId/:sectionId",authMiddleware,authorizeRoles('SCHOOL_ADMIN'),feeStructureController.loadFeeStructure)
+router.post("/fee-structures",authMiddleware,authorizeRoles('SCHOOL_ADMIN'),feeStructureController.saveFeeStructure )
+router.post("/student-fee-override", authMiddleware, authorizeRoles("SCHOOL_ADMIN"), feeStructureController.saveStudentFeeOverride);
+
+
+// invoiceFeeController
+router.post('/invoices/generate', authMiddleware,authorizeRoles('SCHOOL_ADMIN'),invoiceFeeController.generateFeeInvoice)
+router.get("/fee-invoices", authMiddleware, authorizeRoles("SCHOOL_ADMIN"),invoiceFeeController.index);
+router.get("/fee-invoices/:id", authMiddleware, authorizeRoles("SCHOOL_ADMIN"),invoiceFeeController.show);
+router.get("/fee-invoices/student/:studentId", authMiddleware, authorizeRoles("SCHOOL_ADMIN"),invoiceFeeController.getStudentFeeInvoices);
+router.get('/fee-invoices/:id/receipt', authMiddleware, authorizeRoles('SCHOOL_ADMIN'), feeReceiptController.downloadReceipt);
+router.put("/fee-invoices/:id", authMiddleware, authorizeRoles("SCHOOL_ADMIN"),invoiceFeeController.update);
+router.get("/download-fee-invoices", authMiddleware, authorizeRoles("SCHOOL_ADMIN"),invoiceFeeController.downloadInvoices);
+// Fee Payments
+router.post('/fee-payments', authMiddleware, authorizeRoles('SCHOOL_ADMIN'), feePaymentController.store);
+router.get('/fee-payments', authMiddleware, authorizeRoles('SCHOOL_ADMIN'), feePaymentController.index);
+
+
+// feeReceiptController
+router.get('/fee-receipts/student/:studentId', authMiddleware,authorizeRoles('SCHOOL_ADMIN'),feeReceiptController.receipts)
+router.patch(
+    "/fee-invoices/:invoiceId/repair-half-yearly",
     authMiddleware,
     authorizeRoles("SCHOOL_ADMIN"),
-    studentController.getTC
+    feeReceiptController.repairHalfYearlyInvoice
 );
-
-router.post(
-    "/students/:studentId/tc-download",
-    authMiddleware,
-    authorizeRoles("SCHOOL_ADMIN"),
-    studentController.tcDownload
-);
+router.get('/fee-receipts/:paymentId/download', authMiddleware,authorizeRoles('SCHOOL_ADMIN'),feeReceiptController.downloadFeeReceiptPDF)
 
 
-
-
+// studentCrad Id
+router.post('/student-id-card-templates', authMiddleware, authorizeRoles('SCHOOL_ADMIN'), studentIdCardController.createStudentIdCardTemplate);
+router.get('/student-id-card-templates', authMiddleware, authorizeRoles('SCHOOL_ADMIN'), studentIdCardController.getStudentIdCardTemplates);
+router.patch('/student-id-card-templates/:id/status', authMiddleware, authorizeRoles('SCHOOL_ADMIN'), studentIdCardController.status);
+router.put('/student-id-card-templates/:id', authMiddleware, authorizeRoles('SCHOOL_ADMIN'), studentIdCardController.saveUpdateTemplate);
+router.get('/student-id-cards/students', authMiddleware, authorizeRoles('SCHOOL_ADMIN'), studentIdCardController.getStudentsForIdCard);
+router.post('/student-id-cards/generate', authMiddleware, authorizeRoles('SCHOOL_ADMIN'), studentIdCardController.generateStudentIdCards);
+router.post('/student-id-card-templates/create-defaults', authMiddleware, authorizeRoles('SCHOOL_ADMIN'), studentIdCardController.createDefaultIdCardTemplates );
+router.post('/student-id-cards/generate-pdf', authMiddleware, authorizeRoles('SCHOOL_ADMIN'), studentIdCardController.generateStudentIdCardsPdf );
+router.get('/selectTemplete', authMiddleware, authorizeRoles('SCHOOL_ADMIN'), studentIdCardController.getTempleteStatusTrue  );
 module.exports = router;

@@ -4,17 +4,22 @@ const cors = require('cors')
 
 const app = express();
 
-app.use(cors({
-    origin:'http://localhost:5173',
-    methods: ['GET', 'POST', 'PUT', 'DELETE','PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://192.168.1.7:5173",
+];
 
-}))
+app.use(cors({
+  origin: allowedOrigins,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+}));
 
 app.use(express.json());
 
 
-app.get('/',(req,res)=>{
+app.get('/', (req, res) => {
     res.send('Hello World')
 })
 

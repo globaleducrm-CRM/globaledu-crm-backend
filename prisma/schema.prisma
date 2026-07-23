@@ -90,6 +90,7 @@ model User {
 
 
   auditLogs           AuditLog[]
+  generatedStudentIdCards StudentIdCard[]
   transferCertificates TransferCertificate[]
 }
 
@@ -133,10 +134,29 @@ model School {
   teachers        Teacher[]
   timetables  Timetable[]
   users           User[]
+  feeInvoiceBatches FeeInvoiceBatch[]
+  feeInvoices FeeInvoice[]
+
+  // Fee Module
+
+  feeHeads          FeeHead[]
+
+  feeStructures     FeeStructure[]
+
+  feeDiscounts      FeeDiscount[]
+
+  
+
+  feeFines          FeeFine[]
+
   teacherSubjects TeacherSubject[]
   timetableConfigs TimetableConfig[]
   studentEnrollments StudentEnrollment[]
   transferCertificates TransferCertificate[]
+  
+
+  studentIdCardTemplates StudentIdCardTemplate[]
+  studentIdCards         StudentIdCard[]
 
   @@index([schoolCode])
 }
@@ -156,10 +176,15 @@ model AcademicSession {
   sections    Section[]
   subjects    Subject[]
   teachers    Teacher[]
+  feeInvoiceBatches FeeInvoiceBatch[]
+  feeStructures FeeStructure[]
   timetables  Timetable[]
+  feeInvoices FeeInvoice[]
   timetableConfigs TimetableConfig[]
   studentEnrollments StudentEnrollment[]
   transferCertificates TransferCertificate[]
+  studentIdCardTemplates StudentIdCardTemplate[]
+  studentIdCards         StudentIdCard[]
 
 
 
@@ -181,10 +206,13 @@ model Class {
   session    AcademicSession @relation(fields: [sessionId], references: [id])
   sections   Section[]
   students   Student[]
+  feeInvoiceBatches FeeInvoiceBatch[]
   teacherSubjects TeacherSubject[]
   studentEnrollments StudentEnrollment[]
   timetables  Timetable[]
+  feeStructures FeeStructure[]
   timetableConfigs TimetableConfig[]
+  feeInvoices FeeInvoice[]
 
   @@unique([schoolId, sessionId, className])
   @@index([schoolId])
@@ -217,6 +245,8 @@ model Section {
   timetables  Timetable[]
   studentEnrollments StudentEnrollment[]
   timetableConfigs TimetableConfig[]
+  feeInvoices FeeInvoice[]
+  feeInvoiceBatches FeeInvoiceBatch[]
 
 // Session-wise unique
   @@unique([classId,sessionId, sectionName])
@@ -457,6 +487,16 @@ model Student {
   section         Section?         @relation(fields: [sectionId], references: [id])
 
   parent          Parent?          @relation(fields: [parentId], references: [id])
+
+  // Fee Module Relations
+  feeAssignments  StudentFeeAssignment[]
+  feeDiscounts    FeeDiscount[]
+  feeInvoices     FeeInvoice[]
+  feeFines        FeeFine[]
+
+   // NEW
+  feeOverrides    StudentFeeOverride[]
+  idCards StudentIdCard[]
 
   userId          String? @unique
   user            User? @relation(fields: [userId], references: [id])
@@ -777,6 +817,553 @@ model PeriodMaster {
 
   @@unique([timetableConfigId, periodNo])
   @@index([timetableConfigId])
+}
+
+
+
+
+enum FeeFrequency {
+  ONE_TIME
+  MONTHLY
+  QUARTERLY
+  HALF_YEARLY
+  YEARLY
+}
+
+enum InvoiceStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMode {
+  CASH
+  CHEQUE
+  UPI
+  CARD
+  NET_BANKING
+  NEFT
+  RTGS
+}
+
+enum DiscountType {
+  FIXED
+  PERCENTAGE
+}
+
+
+
+model FeeHead {
+  id            String   @id @default(uuid())
+
+  schoolId      String
+
+  feeHeadName   String
+  
+
+  frequency     FeeFrequency
+
+  description   String?
+
+  taxable       Boolean @default(false)
+
+  isActive      Boolean @default(true)
+
+  school         School @relation(fields: [schoolId], references: [id])
+
+  structureItems FeeStructureItem[]
+
+  invoiceItems   FeeInvoiceItem[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([schoolId, feeHeadName])
+  @@index([schoolId])
+}
+
+
+model FeeStructure {
+
+  id            String @id @default(uuid())
+
+  schoolId      String
+
+  sessionId     String
+
+  classId       String
+
+  name          String
+
+  status      Boolean @default(true)
+
+  school         School @relation(fields:[schoolId],references:[id])
+
+  session        AcademicSession @relation(fields:[sessionId],references:[id])
+
+  class          Class @relation(fields:[classId],references:[id])
+
+  items          FeeStructureItem[]
+
+  assignments    StudentFeeAssignment[]
+
+
+  createdAt      DateTime @default(now())
+
+  updatedAt      DateTime @updatedAt
+
+  @@unique([sessionId,classId])
+
+  @@index([schoolId])
+
+}
+
+
+model FeeStructureItem {
+
+  id String @id @default(uuid())
+
+  feeStructureId String
+
+  feeHeadId String
+
+  applyTo String
+
+  amount Decimal
+
+  concession Decimal @default(0)
+
+  remark String?
+
+  feeStructure FeeStructure @relation(fields:[feeStructureId], references:[id], onDelete: Cascade)
+
+  feeHead FeeHead @relation(fields:[feeHeadId], references:[id])
+    // NEW
+  studentOverrides StudentFeeOverride[]
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+}
+
+
+model StudentFeeOverride {
+
+  id               String @id @default(uuid())
+
+  studentId        String
+  feeStructureItemId String
+
+  amount           Decimal @db.Decimal(10,2)
+  concession       Decimal @default(0) @db.Decimal(10,2)
+
+  applyTo          String
+
+  remark           String?
+
+  student          Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  feeStructureItem FeeStructureItem @relation(fields: [feeStructureItemId], references: [id], onDelete: Cascade)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([studentId, feeStructureItemId])
+}
+
+model StudentFeeAssignment {
+
+  id             String @id @default(uuid())
+
+  studentId      String
+
+  feeStructureId String
+
+  assignedAt DateTime @default(now())
+
+  student Student  @relation(fields:[studentId],references:[id])
+
+  feeStructure FeeStructure  @relation(fields:[feeStructureId],references:[id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([studentId,feeStructureId])
+
+}
+
+
+model FeeDiscount {
+
+  id String @id @default(uuid())
+
+  schoolId String
+
+  studentId String
+
+  discountType DiscountType
+
+  value Decimal @db.Decimal(10,2)
+
+  reason String?
+
+  validFrom DateTime?
+
+  validTo DateTime?
+
+  school School @relation(fields:[schoolId],references:[id])
+
+  student Student @relation(fields:[studentId],references:[id])
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId])
+
+}
+
+
+model FeeInvoice {
+
+  id String @id @default(uuid())
+
+  schoolId String
+
+  studentId String
+
+  sessionId String
+
+  classId String
+
+  sectionId String
+
+  invoiceNo String @unique
+
+  invoiceName String?
+
+  invoiceDate DateTime @default(now())
+
+  dateFrom DateTime?
+
+  dateTo DateTime?
+
+  dueDate DateTime?
+
+  totalAmount Decimal @db.Decimal(10,2)
+
+  discountAmount Decimal @default(0) @db.Decimal(10,2)
+
+  fineAmount Decimal @default(0) @db.Decimal(10,2)
+
+  paidAmount Decimal @default(0) @db.Decimal(10,2)
+
+  pendingAmount Decimal @db.Decimal(10,2)
+
+  status InvoiceStatus @default(PENDING)
+
+  school School @relation(fields:[schoolId],references:[id])
+
+  batchId String?
+
+  batch FeeInvoiceBatch? @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  student Student @relation(fields:[studentId],references:[id])
+
+  session AcademicSession @relation(fields:[sessionId],references:[id])
+
+  class Class @relation(fields:[classId],references:[id])
+
+  section Section @relation(fields:[sectionId],references:[id])
+
+  items FeeInvoiceItem[]
+
+  payments FeePayment[]
+
+  receipts FeeReceipt[]
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([batchId])
+  @@index([studentId])
+  @@index([sessionId])
+  @@index([classId])
+  @@index([sectionId])
+  @@index([status])
+}
+
+
+
+model FeeInvoiceItem {
+
+  id String @id @default(uuid())
+
+  invoiceId String
+
+  feeHeadId String
+
+  amount Decimal @db.Decimal(10,2)
+
+  concession Decimal @default(0) @db.Decimal(10,2)
+
+  finalAmount Decimal @db.Decimal(10,2)
+
+  selectedMonths Json?
+
+  invoice FeeInvoice  @relation(fields:[invoiceId],references:[id])
+
+  feeHead FeeHead  @relation(fields:[feeHeadId],references:[id])
+
+  createdAt DateTime @default(now())
+
+  @@index([invoiceId])
+
+}
+enum BatchStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+model FeeInvoiceBatch {
+  id            String   @id @default(uuid())
+
+  schoolId      String
+  sessionId     String
+  classId       String
+  sectionId     String
+
+  invoiceName   String
+  dateFrom      DateTime
+  dateTo        DateTime
+  dueDate       DateTime
+  status        BatchStatus @default(PENDING)
+
+  totalStudents Int      @default(0)
+  totalAmount   Decimal  @default(0)
+  paidAmount    Decimal  @default(0)
+  pendingAmount Decimal  @default(0)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  school        School          @relation(fields: [schoolId], references: [id])
+  session       AcademicSession @relation(fields: [sessionId], references: [id])
+  class         Class           @relation(fields: [classId], references: [id])
+  section       Section         @relation(fields: [sectionId], references: [id])
+
+  invoices      FeeInvoice[]
+
+  @@unique([schoolId, sessionId, classId, sectionId, invoiceName, dateFrom, dateTo])
+  @@index([schoolId])
+  @@index([sessionId])
+  @@index([classId])
+  @@index([sectionId])
+}
+enum PaymentStatus {
+  SUCCESS
+  REFUNDED
+}
+
+model FeePayment {
+  id            String        @id @default(uuid())
+
+  invoiceId     String
+
+  amount        Decimal       @db.Decimal(10, 2)
+  paymentMode   PaymentMode
+  status        PaymentStatus @default(SUCCESS)
+
+  paymentDate   DateTime      @default(now())
+
+  transactionId String?
+  remarks       String?
+
+  invoice       FeeInvoice @relation(fields: [invoiceId], references: [id])
+
+  receipt       FeeReceipt?
+
+  createdAt     DateTime @default(now())
+
+  @@index([invoiceId])
+}
+
+
+model FeeReceipt {
+  id          String   @id @default(uuid())
+
+  invoiceId   String
+  paymentId   String   @unique
+
+  receiptNo   String   @unique
+
+  generatedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  invoice     FeeInvoice @relation(fields: [invoiceId], references: [id])
+
+  payment     FeePayment @relation(fields: [paymentId],references: [id])
+
+  @@index([invoiceId])
+}
+
+
+model FeeFine {
+
+  id String @id @default(uuid())
+
+  schoolId String
+
+  studentId String
+
+  amount Decimal @db.Decimal(10,2)
+
+  reason String
+
+  appliedDate DateTime @default(now())
+
+  school School  @relation(fields:[schoolId],references:[id])
+
+  student Student  @relation(fields:[studentId],references:[id])
+
+  createdAt DateTime @default(now())
+
+  @@index([studentId])
+
+}
+
+enum IdCardOrientation {
+  PORTRAIT
+  LANDSCAPE
+}
+
+enum IdCardSide {
+  FRONT_ONLY
+  FRONT_BACK
+}
+
+enum IdCardStatus {
+  ACTIVE
+  EXPIRED
+  BLOCKED
+}
+
+enum IdCardDesign {
+  PURPLE_CURVE
+  ORANGE_WAVE
+  BLUE_MODERN
+  GREEN_CLASSIC
+  RED_MINIMAL
+  DARK_PREMIUM
+}
+
+enum IdCardField {
+  STUDENT_NAME
+  EMAIL
+  ADMISSION_NO
+  ROLL_NO
+  CLASS
+  SECTION
+  DOB
+  BLOOD_GROUP
+  GENDER
+  FATHER_NAME
+  MOTHER_NAME
+  MOBILE
+  ADDRESS
+  SESSION
+  QR_CODE
+  BARCODE
+  PRINCIPAL_SIGNATURE
+}
+
+model StudentIdCardTemplate {
+  id String @id @default(uuid())
+
+  schoolId  String
+  sessionId String?
+
+  templateName String
+
+  design      IdCardDesign      @default(GREEN_CLASSIC)
+  orientation IdCardOrientation @default(PORTRAIT)
+  cardSide    IdCardSide        @default(FRONT_ONLY)
+
+  width  Decimal @default(54)
+  height Decimal @default(86)
+
+  primaryColor   String?
+  secondaryColor String?
+  textColor      String?
+
+  backgroundImage String?
+  frontBackground String?
+  backBackground  String?
+
+  defaultFields IdCardField[] @default([])
+
+  frontConfig Json?
+  backConfig  Json?
+
+  isSystem  Boolean @default(false)
+  isDefault Boolean @default(false)
+  isActive  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school  School           @relation(fields: [schoolId], references: [id])
+  session AcademicSession? @relation(fields: [sessionId], references: [id])
+
+  idCards StudentIdCard[]
+
+  @@unique([schoolId, templateName])
+  @@index([schoolId, sessionId])
+  @@index([schoolId, isActive])
+}
+
+
+model StudentIdCard {
+  id              String       @id @default(uuid())
+
+  schoolId        String
+  sessionId       String
+  studentId       String
+  templateId      String
+
+  cardNumber      String
+  qrCodeValue     String?
+  barcodeValue    String?
+
+  issueDate       DateTime     @default(now())
+  expiryDate      DateTime?
+
+  status          IdCardStatus @default(ACTIVE)
+
+  generatedAt     DateTime     @default(now())
+  generatedById   String?
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  school          School                @relation(fields: [schoolId], references: [id])
+  session         AcademicSession       @relation(fields: [sessionId], references: [id])
+  student         Student               @relation(fields: [studentId], references: [id])
+  template        StudentIdCardTemplate @relation(fields: [templateId], references: [id])
+  generatedBy     User?                 @relation(fields: [generatedById], references: [id])
+
+  @@unique([schoolId, sessionId, studentId])
+  @@unique([schoolId, cardNumber])
+
+  @@index([schoolId, sessionId])
+  @@index([studentId])
+  @@index([templateId])
 }
 
 model AuditLog {

@@ -191,14 +191,31 @@ exports.index = async (req, res) => {
 
 exports.getAllSection = async (req, res) => {
   try {
-    const { classId } = req.query;
-    // Sections of Current Session
+    const { classId, classIds } = req.query;
+
+    const where = {
+      schoolId: req.user.schoolId,
+      status: true
+    }
+
+    if (classId) {
+      where.classId = classId
+    }
+
+    // Multiple classes
+    if (classIds) {
+      const ids = Array.isArray(classIds)
+        ? classIds
+        : classIds.split(",");
+
+      where.classId = {
+        in: ids,
+      };
+    }
+
+
     const sections = await prisma.section.findMany({
-      where: {
-        schoolId: req.user.schoolId,
-        classId: classId,
-        status: true
-      },
+      where,
       orderBy: {
         sectionName: "asc",
       },
@@ -901,6 +918,7 @@ exports.getStudentBySection = async (req, res) => {
       schoolId: req.user.schoolId,
       sectionId: sectionId,
       sessionId: currentSession.id,
+      status: "ACTIVE",
     };
 
     // Search filter
@@ -957,6 +975,10 @@ exports.getStudentBySection = async (req, res) => {
     // Class filter
     if (classId) {
       whereClause.classId = classId;
+    }
+
+    if (status) {
+      whereClause.status == ACTIVE
     }
 
     // Roll Number range filter
@@ -1018,8 +1040,20 @@ exports.getStudentBySection = async (req, res) => {
             sessionName: true,
           },
         },
+        parent: {
+          select: {
+            id: true,
+            fatherName: true,
+            motherName: true,
+            fatherMobile: true,
+            fatherEmail: true,
+            motherMobile: true,
+            motherEmail: true,
+
+          },
+        },
       },
-      skip: skip,
+      skip,
       take: limit,
       orderBy: orderByClause,
     });

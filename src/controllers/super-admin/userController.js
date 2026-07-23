@@ -102,6 +102,47 @@ exports.index = async (req, res) => {
 };
 
 
+exports.status = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const user = await prisma.user.findUnique({
+            where: { id },
+            select: {
+                id: true,
+                isActive: true,
+            },
+        });
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
+            });
+        }
+
+        const updatedUser = await prisma.user.update({
+            where: { id },
+            data: {
+                isActive: !user.isActive,
+            },
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "User status updated successfully",
+            data: updatedUser,
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+};
+
+
 
 
 

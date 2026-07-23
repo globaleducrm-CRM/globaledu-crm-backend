@@ -17,6 +17,7 @@ router.post('/roles/create',authMiddleware, roleMiddleware("SUPER_ADMIN","SCHOOL
 
 // User All show
 router.get("/all-users",authMiddleware,roleMiddleware("SUPER_ADMIN"),userController.index);
+router.patch("/users/:id/toggle-status",authMiddleware,roleMiddleware("SUPER_ADMIN"),userController.status);
 
 // School
 router.get("/schools",authMiddleware,roleMiddleware("SUPER_ADMIN"),schoolController.index);
